@@ -3,12 +3,13 @@ from http import HTTPStatus
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from app.adapters.auth.exceptions import InvalidApiKeyException, MissingApiKeyException
 from app.application.exceptions import (
     AppException,
     EmptyPayloadException,
     EntityAlreadyExistsException,
     EntityNotFoundException,
+    InvalidApiKeyException,
+    MissingApiKeyException,
 )
 from app.presenters.rest.schemas import StatusResponseSchema
 

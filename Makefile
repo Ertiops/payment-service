@@ -16,6 +16,10 @@ PYTEST   := $(UV) run .venv/bin/pytest
 ALEMBIC  := $(UV) run $(PYTHON) -m $(PROJECT_NAME).adapters.database
 COVERAGE := $(UV) run .venv/bin/coverage
 
+.PHONY: clean_dev venv develop local local_down local-create-migrations \
+	local-apply-migrations local-delete-migrations local-recreate-migrations \
+	test test-ci format ruff mypy lint lint-ci app help
+
 clean_dev: ## Remove virtual environment
 	rm -rf .venv
 

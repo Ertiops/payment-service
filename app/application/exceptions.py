@@ -21,3 +21,9 @@ class EntityAlreadyExistsException(AppException): ...
 class StorageException(AppException):
     def __init__(self, storage_name: str) -> None:
         super().__init__(f"{storage_name} has failed to execute query")
+
+
+class MissingApiKeyException(AppException): ...
+
+
+class InvalidApiKeyException(AppException): ...

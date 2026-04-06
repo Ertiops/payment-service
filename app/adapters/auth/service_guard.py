@@ -1,5 +1,5 @@
 from app.adapters.auth.config import AuthConfig
-from app.adapters.auth.exceptions import (
+from app.application.exceptions import (
     InvalidApiKeyException,
     MissingApiKeyException,
 )

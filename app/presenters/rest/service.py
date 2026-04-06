@@ -10,13 +10,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.adapters.auth.di import AuthProvider
-from app.adapters.auth.exceptions import InvalidApiKeyException, MissingApiKeyException
 from app.adapters.database.di import DatabaseProvider
 from app.application.exceptions import (
     AppException,
     EmptyPayloadException,
     EntityAlreadyExistsException,
     EntityNotFoundException,
+    InvalidApiKeyException,
+    MissingApiKeyException,
 )
 from app.domain.di import DomainProvider
 from app.presenters.rest.config import RestConfig
