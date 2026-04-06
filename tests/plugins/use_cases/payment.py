@@ -1,5 +1,6 @@
 import pytest
 
+from app.domain.interfaces.storages.outbox import IOutboxStorage
 from app.domain.interfaces.storages.payment import IPaymentStorage
 from app.domain.uow import AbstractUow
 from app.domain.use_cases.payment.create import CreatePaymentUC
@@ -10,10 +11,12 @@ from app.domain.use_cases.payment.get_by_id import GetPaymentByIdUC
 def create_payment_uc(
     uow: AbstractUow,
     payment_storage: IPaymentStorage,
+    outbox_storage: IOutboxStorage,
 ) -> CreatePaymentUC:
     return CreatePaymentUC(
         uow=uow,
         payment_storage=payment_storage,
+        outbox_storage=outbox_storage,
     )
 
 

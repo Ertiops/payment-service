@@ -3,9 +3,11 @@ from collections.abc import AsyncIterator
 from dishka import AnyOf, BaseScope, Component, Provider, Scope, provide
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from app.adapters.database.storages.outbox import OutboxStorage
 from app.adapters.database.storages.payment import PaymentStorage
 from app.adapters.database.uow import SqlalchemyUow
 from app.adapters.database.utils import create_engine, create_sessionmaker
+from app.domain.interfaces.storages.outbox import IOutboxStorage
 from app.domain.interfaces.storages.payment import IPaymentStorage
 from app.domain.uow import AbstractUow
 
@@ -40,3 +42,7 @@ class DatabaseProvider(Provider):
     @provide(scope=Scope.REQUEST)
     def payment_storage(self, uow: SqlalchemyUow) -> IPaymentStorage:
         return PaymentStorage(session=uow.session)
+
+    @provide(scope=Scope.REQUEST)
+    def outbox_storage(self, uow: SqlalchemyUow) -> IOutboxStorage:
+        return OutboxStorage(session=uow.session)
