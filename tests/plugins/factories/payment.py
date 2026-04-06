@@ -14,7 +14,7 @@ class PaymentTableFactory(SQLAlchemyFactory[PaymentTable], TimestampedFactoryMix
 
 @pytest.fixture
 def create_payment(session: AsyncSession) -> Callable[..., Awaitable[PaymentTable]]:
-    async def _factory(**kwargs) -> PaymentTable:
+    async def _factory(**kwargs: object) -> PaymentTable:
         payment: PaymentTable = PaymentTableFactory.build(**kwargs)
         session.add(payment)
         await session.flush()

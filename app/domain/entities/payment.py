@@ -6,6 +6,9 @@ from enum import StrEnum, unique
 from typing import Any
 from uuid import UUID
 
+from app.application.entities import UNSET, Unset
+from app.domain.entities.common import ToDictMixin
+
 
 @unique
 class PaymentCurrency(StrEnum):
@@ -45,3 +48,16 @@ class CreatePayment:
     status: PaymentStatus
     idempotency_key: str
     webhook_url: str
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class UpdatePayment(ToDictMixin):
+    id: UUID
+    amount: Decimal | Unset = UNSET
+    currency: PaymentCurrency | Unset = UNSET
+    description: str | Unset = UNSET
+    meta_data: Mapping[str, Any] | Unset = UNSET
+    status: PaymentStatus | Unset = UNSET
+    idempotency_key: str | Unset = UNSET
+    webhook_url: str | Unset = UNSET
+    processed_at: datetime | Unset = UNSET

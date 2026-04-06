@@ -1,7 +1,7 @@
 from typing import Protocol
 from uuid import UUID
 
-from app.domain.entities.payment import CreatePayment, Payment
+from app.domain.entities.payment import CreatePayment, Payment, UpdatePayment
 
 
 class IPaymentStorage(Protocol):
@@ -9,4 +9,7 @@ class IPaymentStorage(Protocol):
         pass
 
     async def get_by_id(self, *, input_dto: UUID) -> Payment | None:
+        pass
+
+    async def update_by_id(self, *, input_dto: UpdatePayment) -> Payment:
         pass

@@ -1,15 +1,23 @@
 from typing import NoReturn
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError, NoResultFound
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.database.converters.payment import convert_payment_table_to_dto
 from app.adapters.database.tables import PaymentTable
-from app.application.exceptions import EntityAlreadyExistsException, StorageException
-from app.domain.entities.payment import CreatePayment, Payment
+from app.application.exceptions import (
+    EntityAlreadyExistsException,
+    EntityNotFoundException,
+    StorageException,
+)
+from app.domain.entities.payment import (
+    CreatePayment,
+    Payment,
+    UpdatePayment,
+)
 from app.domain.interfaces.storages.payment import IPaymentStorage
 
 
@@ -44,6 +52,25 @@ class PaymentStorage(IPaymentStorage):
         )
         result = await self.session.scalar(stmt)
         return convert_payment_table_to_dto(result=result) if result else None
+
+    async def update_by_id(self, *, input_dto: UpdatePayment) -> Payment:
+        stmt = (
+            update(PaymentTable)
+            .where(
+                PaymentTable.id == input_dto.id,
+                PaymentTable.deleted_at.is_(None),
+            )
+            .values(**input_dto.to_dict())
+            .returning(PaymentTable)
+        )
+        try:
+            result = (await self.session.scalars(stmt)).one()
+        except NoResultFound as e:
+            raise EntityNotFoundException(
+                entity=Payment,
+                entity_id=input_dto.id,
+            ) from e
+        return convert_payment_table_to_dto(result=result)
 
     def _raise_exception(self, e: DBAPIError) -> NoReturn:
         constraint = e.__cause__.__cause__.constraint_name  # type: ignore[union-attr]
