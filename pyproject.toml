@@ -1,0 +1,112 @@
+[project]
+name = "app"
+version = "0.1.0"
+description = "Python WebServer"
+license = "MIT"
+readme = "README.md"
+requires-python = ">=3.12"
+
+dependencies = [
+    "aiomisc>=17.5.24,<18.0.0",
+    "alembic==1.15.2",
+    "asyncpg>=0.30.0",
+    "adaptix>=3.0.0b9",
+    "dishka>=1.6.0",
+    "fastapi>=0.116.1",
+    "sqlalchemy[asyncio]>=2.0.43",
+    "uvicorn>=0.35.0",
+    "pydantic[email]>=2.11.7",
+    'greenlet>=3.2.4',
+    "uuid6>=2025.0.1",
+]
+[dependency-groups]
+dev = [
+    "pre-commit>=3.7.1",
+    "mypy>=1.10.1",
+    "ruff>=0.5.1",
+    "pytest-coverage>=0.0",
+    "aiomisc-pytest>=1.3.4",
+    "dirty-equals>=0.9.0",
+    "pyparsing>=3.2.4",
+    "polyfactory>=2.22.2",
+    "httpx>=0.28.1",
+    "asgiref>=3.11.0",
+    "pytest-xdist>=3.8.0",
+]
+
+
+[tool.pytest.ini_options]
+python_files = "test_*"
+python_functions = "test_*"
+python_classes = "TestSuite*"
+addopts = "-p no:cacheprovider"
+
+
+[tool.coverage.run]
+branch = true
+parallel = true
+source = ["app"]
+command_line = "-m pytest -n auto"
+omit = [
+    "__init__.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+
+[tool.coverage.xml]
+output = "coverage.xml"
+
+[tool.ruff]
+line-length = 88
+exclude = [
+    ".git",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".venv",
+]
+indent-width = 4
+target-version = "py312"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.ruff.lint]
+select = [
+    "BLE",
+    "C90",
+    "E",
+    "F",
+    "G",
+    "I",
+    "ICN",
+    "ISC",
+    "PLE",
+    "Q",
+    "RUF006",
+    "RUF100",
+    "T10",
+    "T20",
+    "TID",
+    "UP",
+    "W",
+]
+ignore = ["ISC001", "C901"]
+fixable = ["ALL"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "tests"]
+
+[tool.mypy]
+check_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_untyped_defs = true
+ignore_missing_imports = false
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+module = [
+    "asyncpg.*",
+]
+ignore_missing_imports = true

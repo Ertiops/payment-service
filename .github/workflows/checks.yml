@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Create virtualenv and install uv
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -U pip uv
+
+      - name: Install dependencies
+        run: |
+          .venv/bin/uv sync
+          UV_PROJECT_ENVIRONMENT=.venv .venv/bin/uv sync --python 3.12 --dev
+
+      - name: Run linters
+        run: make lint-ci
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    env:
+      APP_DB_DSN: postgresql+asyncpg://app:app@127.0.0.1:5432/app
+
+    services:
+      postgres:
+        image: postgres:16
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: app
+        options: >-
+          --health-cmd "pg_isready -U app -d app"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Create virtualenv and install uv
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -U pip uv
+
+      - name: Install dependencies
+        run: |
+          .venv/bin/uv sync
+          UV_PROJECT_ENVIRONMENT=.venv .venv/bin/uv sync --python 3.12 --dev
+
+      - name: Apply migrations
+        run: make local-apply-migrations
+
+      - name: Run tests with coverage
+        run: make test-ci
+
+      - name: Upload test reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            coverage.xml
+            junit.xml
