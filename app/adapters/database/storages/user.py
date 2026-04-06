@@ -32,7 +32,7 @@ class UserStorage(IUserStorage):
         try:
             result = (await self.__session.scalars(stmt)).one()
         except IntegrityError as e:
-            self.__raise_exception(e)
+            self._raise_exception(e)
         return convert_user_table_to_dto(result=result)
 
     async def get_by_id(self, *, input_dto: UUID) -> User | None:
@@ -82,7 +82,7 @@ class UserStorage(IUserStorage):
         except NoResultFound as e:
             raise EntityNotFoundException(entity=User, entity_id=input_dto.id) from e
         except IntegrityError as e:
-            self.__raise_exception(e)
+            self._raise_exception(e)
         return convert_user_table_to_dto(result=result)
 
     async def delete_by_id(self, *, input_dto: UUID) -> None:
@@ -93,7 +93,7 @@ class UserStorage(IUserStorage):
         )
         await self.__session.execute(stmt)
 
-    def __raise_exception(self, e: DBAPIError) -> NoReturn:
+    def _raise_exception(self, e: DBAPIError) -> NoReturn:
         constraint = e.__cause__.__cause__.constraint_name  # type: ignore[union-attr]
         match constraint:
             case "uq__users__username":

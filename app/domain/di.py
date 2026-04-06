@@ -1,6 +1,7 @@
 from dishka import Provider, Scope, provide
 
 from app.domain.interfaces.storages.movie import IMovieStorage
+from app.domain.interfaces.storages.payment import IPaymentStorage
 from app.domain.interfaces.storages.user import IUserStorage
 from app.domain.uow import AbstractUow
 from app.domain.use_cases.movie.create import CreateMovieUC
@@ -8,6 +9,8 @@ from app.domain.use_cases.movie.delete_by_id import DeleteMovieByIdUC
 from app.domain.use_cases.movie.get_by_id import GetMovieByIdUC
 from app.domain.use_cases.movie.get_list import GetMovieListUC
 from app.domain.use_cases.movie.update_by_id import UpdateMovieByIdUC
+from app.domain.use_cases.payment.create import CreatePaymentUC
+from app.domain.use_cases.payment.get_by_id import GetPaymentByIdUC
 from app.domain.use_cases.user.create import CreateUserUC
 from app.domain.use_cases.user.delete_by_id import DeleteUserByIdUC
 from app.domain.use_cases.user.get_by_id import GetUserByIdUC
@@ -16,6 +19,28 @@ from app.domain.use_cases.user.update_by_id import UpdateUserByIdUC
 
 
 class DomainProvider(Provider):
+    @provide(scope=Scope.REQUEST)
+    def create_payment(
+        self,
+        payment_storage: IPaymentStorage,
+        uow: AbstractUow,
+    ) -> CreatePaymentUC:
+        return CreatePaymentUC(
+            payment_storage=payment_storage,
+            uow=uow,
+        )
+
+    @provide(scope=Scope.REQUEST)
+    def get_payment_by_id(
+        self,
+        payment_storage: IPaymentStorage,
+        uow: AbstractUow,
+    ) -> GetPaymentByIdUC:
+        return GetPaymentByIdUC(
+            payment_storage=payment_storage,
+            uow=uow,
+        )
+
     @provide(scope=Scope.REQUEST)
     def create_user(
         self,

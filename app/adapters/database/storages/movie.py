@@ -32,7 +32,7 @@ class MovieStorage(IMovieStorage):
         try:
             result = (await self.__session.scalars(stmt)).one()
         except IntegrityError as e:
-            self.__raise_exception(e)
+            self._raise_exception(e)
         return convert_movie_table_to_dto(result=result)
 
     async def get_by_id(self, *, input_dto: UUID) -> Movie | None:
@@ -83,7 +83,7 @@ class MovieStorage(IMovieStorage):
         except NoResultFound as e:
             raise EntityNotFoundException(entity=Movie, entity_id=input_dto.id) from e
         except IntegrityError as e:
-            self.__raise_exception(e)
+            self._raise_exception(e)
         return convert_movie_table_to_dto(result=result)
 
     async def delete_by_id(self, *, input_dto: UUID) -> None:
@@ -94,7 +94,7 @@ class MovieStorage(IMovieStorage):
         )
         await self.__session.execute(stmt)
 
-    def __raise_exception(self, e: DBAPIError) -> NoReturn:
+    def _raise_exception(self, e: DBAPIError) -> NoReturn:
         constraint = e.__cause__.__cause__.constraint_name  # type: ignore[union-attr]
         match constraint:
             case "ix__movies__title_year_director":
