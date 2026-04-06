@@ -1,6 +1,6 @@
-# 📦 FastAPI Template
+# Payment Service
 
-A RESTful API service built with FastAPI that follows Clean Architecture principles.
+Asynchronous payment processing service built with FastAPI and Clean Architecture principles.
 
 ---
 
@@ -13,8 +13,7 @@ A RESTful API service built with FastAPI that follows Clean Architecture princip
 - 🐳 Dockerfile following best practices
 - 🔁 CI/CD pipeline powered by GitHub Workflows with modular jobs
 - 🧷 Integrated [pre-commit](https://github.com/pre-commit/pre-commit) support
-
----
+- 💳 Payment API with create and get-by-id endpoints
 
 ## ⚙️ Development Setup
 
@@ -56,18 +55,6 @@ Ensure the APP_DB_DSN environment variable is configured correctly, then run:
 make local-apply-migrations
 ```
 
-### 🏗️ Create a New Database Migration
-
-Before creating a new migration, make sure all existing migrations have been applied:
-
-```bash (at server)
-python -m app.adapters.database revision --autogenerate -m "Your message"
-```
-
-```bash (locally)
-make local-create-migrations
-```
-
 ### 🔁 Run CI Steps Locally
 
 Use these Makefile commands that mimic the CI process:
@@ -97,22 +84,9 @@ make test-ci  # Run tests with coverage + junit report (CI test stage)
 
 ## 📚 API Endpoints
 
-### 👤 Users
+### 💳 Payments
 
 ```api
-GET     /api/v1/users/             Fetch Users
-POST    /api/v1/users/             Create User
-GET     /api/v1/users/{user_id}/   Fetch User by ID
-PATCH   /api/v1/users/{user_id}/   Update User by ID
-DELETE  /api/v1/users/{user_id}/   Delete User by ID
-```
-
-### 🎬 Movies
-
-```api
-GET     /api/v1/movies/            Fetch Movies
-POST    /api/v1/movies/            Create Movie
-GET     /api/v1/movies/{movie_id}/  Fetch Movie by ID
-PATCH   /api/v1/movies/{movie_id}/  Update Movie by ID
-DELETE  /api/v1/movies/{movie_id}/  Delete Movie by ID
+POST    /api/v1/payments/             Create Payment
+GET     /api/v1/payments/{payment_id}/ Fetch Payment by ID
 ```
