@@ -14,8 +14,3 @@ class AppConfig:
     debug: bool = field(
         default_factory=lambda: environ.get("APP_DEBUG", "False").lower() == "true"
     )
-
-
-@dataclass(frozen=True, kw_only=True, slots=True)
-class SecretConfig:
-    secret: str = field(default_factory=lambda: environ.get("APP_SECRET", "secret"))

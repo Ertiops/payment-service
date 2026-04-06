@@ -9,6 +9,8 @@ from dishka.integrations.fastapi import setup_dishka
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.adapters.auth.di import AuthProvider
+from app.adapters.auth.exceptions import InvalidApiKeyException, MissingApiKeyException
 from app.adapters.database.di import DatabaseProvider
 from app.application.exceptions import (
     AppException,
@@ -18,6 +20,7 @@ from app.application.exceptions import (
 )
 from app.domain.di import DomainProvider
 from app.presenters.rest.config import RestConfig
+from app.presenters.rest.di import FastAPIProvider
 from app.presenters.rest.routers.api.router import router as api_router
 from app.presenters.rest.routers.api.v1.exception_handlers import (
     app_exception_handler,
@@ -25,6 +28,8 @@ from app.presenters.rest.routers.api.v1.exception_handlers import (
     entity_already_exists_exception_handler,
     entity_not_found_exception_handler,
     http_exception_handler,
+    invalid_api_key_exception_handler,
+    missing_api_key_exception_handler,
 )
 
 log = logging.getLogger(__name__)
@@ -38,6 +43,8 @@ EXCEPTION_HANDLERS: Final[ExceptionHandlersType] = (
     (EntityNotFoundException, entity_not_found_exception_handler),
     (EmptyPayloadException, empty_payload_exception_handler),
     (EntityAlreadyExistsException, entity_already_exists_exception_handler),
+    (MissingApiKeyException, missing_api_key_exception_handler),
+    (InvalidApiKeyException, invalid_api_key_exception_handler),
 )
 
 
@@ -86,11 +93,13 @@ class RestService(UvicornService):
 
     def set_dependencies(self) -> None:
         container = make_async_container(
+            AuthProvider(config=self.config.auth),
             DatabaseProvider(
                 dsn=self.config.database.dsn,
                 debug=self.config.app.debug,
             ),
             DomainProvider(),
+            FastAPIProvider(),
             *self.extra_providers,
         )
         setup_dishka(container=container, app=self.__app)
