@@ -20,6 +20,7 @@ dependencies = [
     "uuid6>=2025.0.1",
     "faststream[rabbit]>=0.6.7",
     "asyncly==0.3.3",
+    "asgiref>=3.11.0",
 ]
 [dependency-groups]
 dev = [
@@ -32,7 +33,6 @@ dev = [
     "pyparsing>=3.2.4",
     "polyfactory>=2.22.2",
     "httpx>=0.28.1",
-    "asgiref>=3.11.0",
     "pytest-xdist>=3.8.0",
 ]
 

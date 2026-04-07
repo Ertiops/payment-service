@@ -7,6 +7,20 @@ event in the same transaction, publishes `payments.new` events to RabbitMQ,
 processes payments in a consumer, and sends result notifications to client
 webhooks.
 
+## Architecture
+
+- REST API is implemented with FastAPI and Pydantic v2.
+- Persistence uses async SQLAlchemy 2 and PostgreSQL.
+- Dependency injection is handled by Dishka.
+- Runtime processes are aiomisc services started from one `python -m app` entrypoint.
+- Payment creation uses idempotency by `Idempotency-Key`.
+- API access is protected by static `X-API-Key`.
+- Outbox pattern guarantees that payment creation and event creation happen in one DB transaction.
+- Outbox relay publishes pending outbox messages to RabbitMQ.
+- RabbitMQ queue `payments.new` uses quorum queue delivery limit and dead-letters failed messages to `payments.new.dlq`.
+- Payment consumer emulates external gateway processing and updates only `pending` payments.
+- Webhook delivery uses asyncly/aiohttp and retries failed deliveries via `aiomisc.asyncretry`.
+
 ## Current Flow
 
 1. `POST /api/v1/payments/` creates a `pending` payment.
@@ -15,7 +29,7 @@ webhooks.
 4. `payment-consumer` reads `payments.new`.
 5. The consumer emulates payment gateway processing: `2-5` seconds, `90%` success.
 6. The consumer atomically updates only `pending` payments to `succeeded` or `failed`.
-7. The consumer sends a webhook notification with retry and exponential backoff.
+7. The consumer sends a webhook notification with retry.
 8. RabbitMQ moves messages to `payments.new.dlq` after `3` failed deliveries.
 
 ## API
@@ -90,7 +104,13 @@ entrypoint.
 Full runtime stack:
 
 ```bash
-docker compose up --build
+make prod
+```
+
+Apply migrations inside the production compose stack:
+
+```bash
+make prod-apply-migrations
 ```
 
 Services:

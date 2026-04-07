@@ -24,6 +24,10 @@ class OutboxRelayService(Service):
     _container: AsyncContainer
     _task: asyncio.Task[None]
 
+    def __init__(self, config: OutboxRelayConfig) -> None:
+        super().__init__()
+        self._config = config
+
     async def start(self) -> None:
         self._container = make_async_container(
             DatabaseProvider(

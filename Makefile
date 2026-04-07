@@ -4,6 +4,7 @@ TEST_PATH       := ./tests
 TEST_WORKERS    := 8
 
 DOCKER_FILENAME := docker-compose.dev.yaml
+PROD_DOCKER_FILENAME := docker-compose.yaml
 PYTHON_VERSION = 3.12
 
 
@@ -16,7 +17,8 @@ PYTEST   := $(UV) run .venv/bin/pytest
 ALEMBIC  := $(UV) run $(PYTHON) -m $(PROJECT_NAME).adapters.database
 COVERAGE := $(UV) run .venv/bin/coverage
 
-.PHONY: clean_dev venv develop local local_down local-create-migrations \
+.PHONY: clean_dev venv develop local local_down prod prod-apply-migrations \
+	local-create-migrations \
 	local-apply-migrations local-delete-migrations local-recreate-migrations \
 	test test-ci format ruff mypy lint lint-ci app help
 
@@ -37,6 +39,12 @@ local: ## Start local stack (build & recreate)
 
 local_down: ## Stop local stack and remove volumes
 	docker compose -f $(DOCKER_FILENAME) down -v
+
+prod: ## Start production stack
+	docker compose -f $(PROD_DOCKER_FILENAME) up --build --force-recreate --remove-orphans
+
+prod-apply-migrations: ## Apply migrations in production docker compose app service
+	docker compose -f $(PROD_DOCKER_FILENAME) run --rm app python -m $(PROJECT_NAME).adapters.database upgrade head
 
 local-create-migrations:
 	$(ALEMBIC) revision --autogenerate

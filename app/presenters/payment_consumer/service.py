@@ -21,6 +21,10 @@ class PaymentConsumerService(Service):
     _broker: RabbitBroker
     _container: AsyncContainer
 
+    def __init__(self, config: PaymentConsumerConfig) -> None:
+        super().__init__()
+        self._config = config
+
     async def start(self) -> None:
         self._container = make_async_container(
             DatabaseProvider(
