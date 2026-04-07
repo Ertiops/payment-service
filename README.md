@@ -7,7 +7,7 @@ event in the same transaction, publishes `payments.new` events to RabbitMQ,
 processes payments in a consumer, and sends result notifications to client
 webhooks.
 
-## Architecture
+## 🧱 Architecture
 
 - REST API is implemented with FastAPI and Pydantic v2.
 - Persistence uses async SQLAlchemy 2 and PostgreSQL.
@@ -21,7 +21,7 @@ webhooks.
 - Payment consumer emulates external gateway processing and updates only `pending` payments.
 - Webhook delivery uses asyncly/aiohttp and retries failed deliveries via `aiomisc.asyncretry`.
 
-## Current Flow
+## 🔄 Current Flow
 
 1. `POST /api/v1/payments/` creates a `pending` payment.
 2. `CreatePaymentUC` writes `payment + outbox` in one DB transaction.
@@ -32,7 +32,7 @@ webhooks.
 7. The consumer sends a webhook notification with retry.
 8. RabbitMQ moves messages to `payments.new.dlq` after `3` failed deliveries.
 
-## API
+## 📚 API
 
 All `/api/v1/*` endpoints require `X-API-Key`.
 
@@ -56,7 +56,7 @@ GET /api/v1/payments/{payment_id}/
 X-API-Key: secret
 ```
 
-## Environment
+## ⚙️ Environment
 
 Required:
 
@@ -82,7 +82,7 @@ APP_WEBHOOK_INITIAL_DELAY_SECONDS=1
 APP_WEBHOOK_BASE_URL=http://webhook.site
 ```
 
-## Run Locally
+## 🧑‍💻 Development Run
 
 Start local infrastructure:
 
@@ -99,7 +99,7 @@ python -m app
 This starts REST API, outbox relay, and payment consumer in one aiomisc
 entrypoint.
 
-## Docker Compose
+## 🚀 Production Run
 
 Full runtime stack:
 
@@ -119,7 +119,7 @@ Services:
 - `rabbitmq`: RabbitMQ with management UI on `15672`
 - `app`: REST API, outbox relay, and payment consumer
 
-## Tests And Checks
+## 🧪 Tests And Checks
 
 ```bash
 make lint-ci
@@ -134,7 +134,7 @@ Targeted checks used during development:
 .venv/bin/python -m pytest ./tests -q
 ```
 
-## Migrations
+## 🗃️ Migrations
 
 Migrations are maintained manually in this repository. After model changes, create
 or adjust Alembic migrations manually.
