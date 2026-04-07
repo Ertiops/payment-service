@@ -8,6 +8,8 @@ from app.application.exceptions import (
     EmptyPayloadException,
     EntityAlreadyExistsException,
     EntityNotFoundException,
+    InvalidApiKeyException,
+    MissingApiKeyException,
 )
 from app.presenters.rest.schemas import StatusResponseSchema
 
@@ -55,6 +57,26 @@ async def entity_already_exists_exception_handler(
 ) -> JSONResponse:
     return exception_json_response(
         status_code=HTTPStatus.CONFLICT,
+        message=exc.message,
+    )
+
+
+async def missing_api_key_exception_handler(
+    request: Request,
+    exc: MissingApiKeyException,
+) -> JSONResponse:
+    return exception_json_response(
+        status_code=HTTPStatus.UNAUTHORIZED,
+        message=exc.message,
+    )
+
+
+async def invalid_api_key_exception_handler(
+    request: Request,
+    exc: InvalidApiKeyException,
+) -> JSONResponse:
+    return exception_json_response(
+        status_code=HTTPStatus.FORBIDDEN,
         message=exc.message,
     )
 

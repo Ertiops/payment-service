@@ -1,8 +1,9 @@
 from dataclasses import dataclass, field
 from os import environ
 
+from app.adapters.auth.config import AuthConfig
 from app.adapters.database.config import DatabaseConfig
-from app.application.config import AppConfig, SecretConfig
+from app.application.config import AppConfig
 
 
 @dataclass
@@ -11,5 +12,5 @@ class RestConfig:
     port: int = field(default_factory=lambda: int(environ.get("APP_REST_PORT", 8000)))
 
     app: AppConfig = field(default_factory=lambda: AppConfig())
+    auth: AuthConfig = field(default_factory=lambda: AuthConfig())
     database: DatabaseConfig = field(default_factory=lambda: DatabaseConfig())
-    secret: SecretConfig = field(default_factory=lambda: SecretConfig())

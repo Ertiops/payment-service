@@ -1,12 +1,15 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-from app.presenters.rest.routers.api.v1.controllers.movie import (
-    router as movie_router,
+from app.presenters.rest.dependencies.auth import (
+    X_API_KEY_HEADER,
+    require_service_access,
 )
-from app.presenters.rest.routers.api.v1.controllers.user import (
-    router as user_router,
+from app.presenters.rest.routers.api.v1.controllers.payment import (
+    router as payment_router,
 )
 
-router = APIRouter(prefix="/v1")
-router.include_router(user_router)
-router.include_router(movie_router)
+router = APIRouter(
+    prefix="/v1",
+    dependencies=[Depends(X_API_KEY_HEADER), Depends(require_service_access)],
+)
+router.include_router(payment_router)

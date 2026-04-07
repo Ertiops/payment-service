@@ -1,118 +1,140 @@
-# 📦 FastAPI Template
+# Payment Service
 
-A RESTful API service built with FastAPI that follows Clean Architecture principles.
+Asynchronous payment processing service.
 
----
+The service accepts payment requests, stores them in PostgreSQL, writes an outbox
+event in the same transaction, publishes `payments.new` events to RabbitMQ,
+processes payments in a consumer, and sends result notifications to client
+webhooks.
 
-## ✨ Features
+## 🧱 Architecture
 
-- ✅ Clean architecture with clearly separated interfaces, layers, and entities
-- 🧩 Dependency Injection using [Dishka](https://github.com/reagento/dishka)
-- 🧪 Automatic testing via [pytest](https://docs.pytest.org/en/stable/)
-- 🧹 Formatting and static analysis with [ruff](https://github.com/astral-sh/ruff) and [mypy](https://github.com/python/mypy)
-- 🐳 Dockerfile following best practices
-- 🔁 CI/CD pipeline powered by GitHub Workflows with modular jobs
-- 🧷 Integrated [pre-commit](https://github.com/pre-commit/pre-commit) support
+- REST API is implemented with FastAPI and Pydantic v2.
+- Persistence uses async SQLAlchemy 2 and PostgreSQL.
+- Dependency injection is handled by Dishka.
+- Runtime processes are aiomisc services started from one `python -m app` entrypoint.
+- Payment creation uses idempotency by `Idempotency-Key`.
+- API access is protected by static `X-API-Key`.
+- Outbox pattern guarantees that payment creation and event creation happen in one DB transaction.
+- Outbox relay publishes pending outbox messages to RabbitMQ.
+- RabbitMQ queue `payments.new` uses quorum queue delivery limit and dead-letters failed messages to `payments.new.dlq`.
+- Payment consumer emulates external gateway processing and updates only `pending` payments.
+- Webhook delivery uses asyncly/aiohttp and retries failed deliveries via `aiomisc.asyncretry`.
 
----
+## 🔄 Current Flow
 
-## ⚙️ Development Setup
+1. `POST /api/v1/payments/` creates a `pending` payment.
+2. `CreatePaymentUC` writes `payment + outbox` in one DB transaction.
+3. `outbox-relay` publishes pending outbox events to RabbitMQ queue `payments.new`.
+4. `payment-consumer` reads `payments.new`.
+5. The consumer emulates payment gateway processing: `2-5` seconds, `90%` success.
+6. The consumer atomically updates only `pending` payments to `succeeded` or `failed`.
+7. The consumer sends a webhook notification with retry.
+8. RabbitMQ moves messages to `payments.new.dlq` after `3` failed deliveries.
 
-### 📥 Install Dependencies
+## 📚 API
 
-Use `uv` to create a virtual environment and install dependencies:
+All `/api/v1/*` endpoints require `X-API-Key`.
 
-```bash
-make develop
+```http
+POST /api/v1/payments/
+Idempotency-Key: payment-key
+X-API-Key: secret
+Content-Type: application/json
+
+{
+  "amount": "10.50",
+  "currency": "USD",
+  "description": "test payment",
+  "metadata": {"order_id": "order-1"},
+  "webhook_url": "https://example.com/webhook"
+}
 ```
 
-### 🐳 Start Local Dev Containers
+```http
+GET /api/v1/payments/{payment_id}/
+X-API-Key: secret
+```
 
-To launch the PostgreSQL container for local development using Docker Compose:
+## ⚙️ Environment
+
+Required:
+
+```bash
+APP_DB_DSN=postgresql+asyncpg://app:app@127.0.0.1:5432/app
+APP_X_API_KEY=secret
+APP_RABBITMQ_DSN=amqp://guest:guest@127.0.0.1:5672/
+```
+
+Useful defaults:
+
+```bash
+APP_REST_HOST=127.0.0.1
+APP_REST_PORT=8000
+APP_OUTBOX_POLL_INTERVAL=1
+APP_OUTBOX_MAX_ATTEMPTS=3
+APP_PAYMENT_GATEWAY_MIN_DELAY_SECONDS=2
+APP_PAYMENT_GATEWAY_MAX_DELAY_SECONDS=5
+APP_PAYMENT_GATEWAY_SUCCESS_RATE=0.9
+APP_WEBHOOK_TIMEOUT_SECONDS=5
+APP_WEBHOOK_MAX_ATTEMPTS=3
+APP_WEBHOOK_INITIAL_DELAY_SECONDS=1
+APP_WEBHOOK_BASE_URL=http://webhook.site
+```
+
+## 🧑‍💻 Development Run
+
+Start local infrastructure:
 
 ```bash
 make local
 ```
 
-### 🧪 Run Tests
-
-Make sure containers are running (make local), then execute:
+Run the application:
 
 ```bash
-make test
+python -m app
 ```
 
-For a manual parallel run:
+This starts REST API, outbox relay, and payment consumer in one aiomisc
+entrypoint.
+
+## 🚀 Production Run
+
+Full runtime stack:
 
 ```bash
-.venv/bin/pytest -vx ./tests -vv -n 8
+make prod
 ```
 
-### 📈 Apply Database Migrations
-
-Ensure the APP_DB_DSN environment variable is configured correctly, then run:
+Apply migrations inside the production compose stack:
 
 ```bash
-make local-apply-migrations
+make prod-apply-migrations
 ```
 
-### 🏗️ Create a New Database Migration
+Services:
 
-Before creating a new migration, make sure all existing migrations have been applied:
+- `db`: PostgreSQL
+- `rabbitmq`: RabbitMQ with management UI on `15672`
+- `app`: REST API, outbox relay, and payment consumer
 
-```bash (at server)
-python -m app.adapters.database revision --autogenerate -m "Your message"
-```
-
-```bash (locally)
-make local-create-migrations
-```
-
-### 🔁 Run CI Steps Locally
-
-Use these Makefile commands that mimic the CI process:
+## 🧪 Tests And Checks
 
 ```bash
-make develop  # Install dependencies
-make lint-ci  # Run ruff and mypy (CI lint stage)
-make test-ci  # Run tests with coverage + junit report (CI test stage)
+make lint-ci
+make test-ci
 ```
 
-## 🚦 CI
+Targeted checks used during development:
 
-- GitHub Actions workflow: `.github/workflows/checks.yml`
-- Trigger: Pull Request into `dev`
-- Stages:
-  - `lint` -> `make lint-ci`
-  - `test` -> `make test-ci`
-- Test artifacts uploaded by CI:
-  - `coverage.xml`
-  - `junit.xml`
-
-## ⚡ Parallel Tests
-
-- Default local test command (`make test`) runs pytest with xdist: `-n 8`
-- CI test command (`make test-ci`) uses coverage + junit output; with current config it also runs tests in parallel (`[tool.coverage.run] command_line = "-m pytest -n auto"`)
-- Recommended: avoid running multiple independent pytest sessions against the same DB at the same time
-
-## 📚 API Endpoints
-
-### 👤 Users
-
-```api
-GET     /api/v1/users/             Fetch Users
-POST    /api/v1/users/             Create User
-GET     /api/v1/users/{user_id}/   Fetch User by ID
-PATCH   /api/v1/users/{user_id}/   Update User by ID
-DELETE  /api/v1/users/{user_id}/   Delete User by ID
+```bash
+.venv/bin/ruff check ./app
+.venv/bin/mypy ./app
+.venv/bin/python -m pytest ./tests -q
 ```
 
-### 🎬 Movies
+## 🗃️ Migrations
 
-```api
-GET     /api/v1/movies/            Fetch Movies
-POST    /api/v1/movies/            Create Movie
-GET     /api/v1/movies/{movie_id}/  Fetch Movie by ID
-PATCH   /api/v1/movies/{movie_id}/  Update Movie by ID
-DELETE  /api/v1/movies/{movie_id}/  Delete Movie by ID
-```
+Migrations are maintained manually in this repository. After model changes, create
+or adjust Alembic migrations manually.
