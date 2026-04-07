@@ -61,3 +61,8 @@ class UpdatePayment(ToDictMixin):
     idempotency_key: str | Unset = UNSET
     webhook_url: str | Unset = UNSET
     processed_at: datetime | Unset = UNSET
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class ProcessPayment:
+    id: UUID

@@ -16,6 +16,7 @@ from app.application.exceptions import (
 from app.domain.entities.payment import (
     CreatePayment,
     Payment,
+    PaymentStatus,
     UpdatePayment,
 )
 from app.domain.interfaces.storages.payment import IPaymentStorage
@@ -58,6 +59,7 @@ class PaymentStorage(IPaymentStorage):
             update(PaymentTable)
             .where(
                 PaymentTable.id == input_dto.id,
+                PaymentTable.status == PaymentStatus.PENDING,
                 PaymentTable.deleted_at.is_(None),
             )
             .values(**input_dto.to_dict())

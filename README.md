@@ -1,92 +1,120 @@
 # Payment Service
 
-Asynchronous payment processing service built with FastAPI and Clean Architecture principles.
+Asynchronous payment processing service.
 
----
+The service accepts payment requests, stores them in PostgreSQL, writes an outbox
+event in the same transaction, publishes `payments.new` events to RabbitMQ,
+processes payments in a consumer, and sends result notifications to client
+webhooks.
 
-## ✨ Features
+## Current Flow
 
-- ✅ Clean architecture with clearly separated interfaces, layers, and entities
-- 🧩 Dependency Injection using [Dishka](https://github.com/reagento/dishka)
-- 🧪 Automatic testing via [pytest](https://docs.pytest.org/en/stable/)
-- 🧹 Formatting and static analysis with [ruff](https://github.com/astral-sh/ruff) and [mypy](https://github.com/python/mypy)
-- 🐳 Dockerfile following best practices
-- 🔁 CI/CD pipeline powered by GitHub Workflows with modular jobs
-- 🧷 Integrated [pre-commit](https://github.com/pre-commit/pre-commit) support
-- 💳 Payment API with create and get-by-id endpoints
+1. `POST /api/v1/payments/` creates a `pending` payment.
+2. `CreatePaymentUC` writes `payment + outbox` in one DB transaction.
+3. `outbox-relay` publishes pending outbox events to RabbitMQ queue `payments.new`.
+4. `payment-consumer` reads `payments.new`.
+5. The consumer emulates payment gateway processing: `2-5` seconds, `90%` success.
+6. The consumer atomically updates only `pending` payments to `succeeded` or `failed`.
+7. The consumer sends a webhook notification with retry and exponential backoff.
+8. RabbitMQ moves messages to `payments.new.dlq` after `3` failed deliveries.
 
-## ⚙️ Development Setup
+## API
 
-### 📥 Install Dependencies
+All `/api/v1/*` endpoints require `X-API-Key`.
 
-Use `uv` to create a virtual environment and install dependencies:
+```http
+POST /api/v1/payments/
+Idempotency-Key: payment-key
+X-API-Key: secret
+Content-Type: application/json
 
-```bash
-make develop
+{
+  "amount": "10.50",
+  "currency": "USD",
+  "description": "test payment",
+  "metadata": {"order_id": "order-1"},
+  "webhook_url": "https://example.com/webhook"
+}
 ```
 
-### 🐳 Start Local Dev Containers
+```http
+GET /api/v1/payments/{payment_id}/
+X-API-Key: secret
+```
 
-To launch the PostgreSQL container for local development using Docker Compose:
+## Environment
+
+Required:
+
+```bash
+APP_DB_DSN=postgresql+asyncpg://app:app@127.0.0.1:5432/app
+APP_X_API_KEY=secret
+APP_RABBITMQ_DSN=amqp://guest:guest@127.0.0.1:5672/
+```
+
+Useful defaults:
+
+```bash
+APP_REST_HOST=127.0.0.1
+APP_REST_PORT=8000
+APP_OUTBOX_POLL_INTERVAL=1
+APP_OUTBOX_MAX_ATTEMPTS=3
+APP_PAYMENT_GATEWAY_MIN_DELAY_SECONDS=2
+APP_PAYMENT_GATEWAY_MAX_DELAY_SECONDS=5
+APP_PAYMENT_GATEWAY_SUCCESS_RATE=0.9
+APP_WEBHOOK_TIMEOUT_SECONDS=5
+APP_WEBHOOK_MAX_ATTEMPTS=3
+APP_WEBHOOK_INITIAL_DELAY_SECONDS=1
+APP_WEBHOOK_BASE_URL=http://webhook.site
+```
+
+## Run Locally
+
+Start local infrastructure:
 
 ```bash
 make local
 ```
 
-### 🧪 Run Tests
-
-Make sure containers are running (make local), then execute:
+Run the application:
 
 ```bash
-make test
+python -m app
 ```
 
-For a manual parallel run:
+This starts REST API, outbox relay, and payment consumer in one aiomisc
+entrypoint.
+
+## Docker Compose
+
+Full runtime stack:
 
 ```bash
-.venv/bin/pytest -vx ./tests -vv -n 8
+docker compose up --build
 ```
 
-### 📈 Apply Database Migrations
+Services:
 
-Ensure the APP_DB_DSN environment variable is configured correctly, then run:
+- `db`: PostgreSQL
+- `rabbitmq`: RabbitMQ with management UI on `15672`
+- `app`: REST API, outbox relay, and payment consumer
+
+## Tests And Checks
 
 ```bash
-make local-apply-migrations
+make lint-ci
+make test-ci
 ```
 
-### 🔁 Run CI Steps Locally
-
-Use these Makefile commands that mimic the CI process:
+Targeted checks used during development:
 
 ```bash
-make develop  # Install dependencies
-make lint-ci  # Run ruff and mypy (CI lint stage)
-make test-ci  # Run tests with coverage + junit report (CI test stage)
+.venv/bin/ruff check ./app
+.venv/bin/mypy ./app
+.venv/bin/python -m pytest ./tests -q
 ```
 
-## 🚦 CI
+## Migrations
 
-- GitHub Actions workflow: `.github/workflows/checks.yml`
-- Trigger: Pull Request into `dev`
-- Stages:
-  - `lint` -> `make lint-ci`
-  - `test` -> `make test-ci`
-- Test artifacts uploaded by CI:
-  - `coverage.xml`
-  - `junit.xml`
-
-## ⚡ Parallel Tests
-
-- Default local test command (`make test`) runs pytest with xdist: `-n 8`
-- CI test command (`make test-ci`) uses coverage + junit output; with current config it also runs tests in parallel (`[tool.coverage.run] command_line = "-m pytest -n auto"`)
-- Recommended: avoid running multiple independent pytest sessions against the same DB at the same time
-
-## 📚 API Endpoints
-
-### 💳 Payments
-
-```api
-POST    /api/v1/payments/             Create Payment
-GET     /api/v1/payments/{payment_id}/ Fetch Payment by ID
-```
+Migrations are maintained manually in this repository. After model changes, create
+or adjust Alembic migrations manually.

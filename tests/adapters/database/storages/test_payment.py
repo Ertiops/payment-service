@@ -149,3 +149,18 @@ async def test__update_by_id__entity_not_found_exception(
                 processed_at=now_utc(),
             )
         )
+
+
+async def test__update_by_id__entity_not_found_exception__already_processed(
+    payment_storage: PaymentStorage,
+    create_payment: Callable[..., Awaitable[PaymentTable]],
+) -> None:
+    db_payment = await create_payment(status=PaymentStatus.SUCCEEDED)
+    with pytest.raises(EntityNotFoundException):
+        await payment_storage.update_by_id(
+            input_dto=UpdatePayment(
+                id=db_payment.id,
+                status=PaymentStatus.FAILED,
+                processed_at=now_utc(),
+            )
+        )

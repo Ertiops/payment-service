@@ -39,3 +39,39 @@ class CreateOutbox:
     attempts: int
     last_error: str | None
     published_at: datetime | None
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class GetOutboxToPublish:
+    event_type: OutboxEventType
+    status: OutboxStatus
+    max_attempts: int
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class MarkOutboxAsPublished:
+    id: UUID
+    status: OutboxStatus
+    published_at: datetime
+    last_error: str | None
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class MarkOutboxAsFailed:
+    id: UUID
+    status: OutboxStatus
+    attempts: int
+    last_error: str
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class PublishOutboxMessage:
+    id: UUID
+    event_type: OutboxEventType
+    payload: Mapping[str, Any]
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class PublishNextOutbox:
+    event_type: OutboxEventType
+    max_attempts: int
