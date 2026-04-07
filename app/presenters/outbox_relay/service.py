@@ -8,6 +8,7 @@ from dishka.async_container import AsyncContainer
 
 from app.adapters.database.di import DatabaseProvider
 from app.adapters.rabbitmq.di import RabbitMQProvider
+from app.application.exceptions import AppException
 from app.domain.di import OutboxRelayProvider
 from app.domain.entities.outbox import (
     OutboxEventType,
@@ -51,7 +52,7 @@ class OutboxRelayService(Service):
                             max_attempts=self._config.max_attempts,
                         )
                     )
-            except Exception:
+            except AppException:
                 log.exception("Outbox relay iteration failed")
             await asyncio.sleep(self._config.poll_interval)
 

@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+from app.application.exceptions import OutboxPublishException
 from app.application.use_case import IUseCase
 from app.domain.entities.outbox import (
     GetOutboxToPublish,
@@ -46,7 +47,7 @@ class PublishNextOutboxUC(IUseCase[PublishNextOutbox, Outbox | None]):
                         payload=outbox.payload,
                     )
                 )
-            except Exception as e:  # noqa: BLE001
+            except OutboxPublishException as e:
                 attempts = outbox.attempts + 1
                 return await self._outbox_storage.mark_as_failed(
                     input_dto=MarkOutboxAsFailed(

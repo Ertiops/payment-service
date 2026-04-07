@@ -3,6 +3,7 @@ from collections.abc import Awaitable, Callable
 from dirty_equals import IsDatetime
 
 from app.adapters.database.tables import OutboxTable
+from app.application.exceptions import OutboxPublishException
 from app.domain.entities.outbox import (
     Outbox,
     OutboxEventType,
@@ -72,7 +73,7 @@ async def test__publish_next__retry(
     outbox_publisher: FakeOutboxPublisher,
     create_outbox: Callable[..., Awaitable[OutboxTable]],
 ) -> None:
-    outbox_publisher.exception = RuntimeError("publish failed")
+    outbox_publisher.exception = OutboxPublishException("publish failed")
     db_outbox = await create_outbox(
         event_type=OutboxEventType.PAYMENT_CREATED,
         status=OutboxStatus.PENDING,
@@ -103,7 +104,7 @@ async def test__publish_next__failed(
     outbox_publisher: FakeOutboxPublisher,
     create_outbox: Callable[..., Awaitable[OutboxTable]],
 ) -> None:
-    outbox_publisher.exception = RuntimeError("publish failed")
+    outbox_publisher.exception = OutboxPublishException("publish failed")
     db_outbox = await create_outbox(
         event_type=OutboxEventType.PAYMENT_CREATED,
         status=OutboxStatus.PENDING,

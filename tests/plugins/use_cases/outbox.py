@@ -1,5 +1,6 @@
 import pytest
 
+from app.application.exceptions import OutboxPublishException
 from app.domain.entities.outbox import PublishOutboxMessage
 from app.domain.interfaces.publishers.outbox import IOutboxPublisher
 from app.domain.interfaces.storages.outbox import IOutboxStorage
@@ -10,7 +11,7 @@ from app.domain.use_cases.outbox.publish_next import PublishNextOutboxUC
 class FakeOutboxPublisher(IOutboxPublisher):
     def __init__(self) -> None:
         self.messages: list[PublishOutboxMessage] = []
-        self.exception: Exception | None = None
+        self.exception: OutboxPublishException | None = None
 
     async def publish(self, *, input_dto: PublishOutboxMessage) -> None:
         if self.exception is not None:
