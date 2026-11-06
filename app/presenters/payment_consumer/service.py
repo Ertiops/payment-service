@@ -1,8 +1,6 @@
 import asyncio
 import logging
-from collections.abc import Mapping
 from typing import Any
-from uuid import UUID
 
 from aiomisc import Service
 from dishka import make_async_container
@@ -11,7 +9,7 @@ from faststream.exceptions import RejectMessage
 from faststream.middlewares import AckPolicy
 from faststream.rabbit import RabbitBroker
 from faststream.rabbit.schemas.channel import Channel
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import ValidationError
 
 from app.adapters.database.di import DatabaseProvider
 from app.adapters.payment_gateway.di import PaymentGatewayProvider
@@ -22,13 +20,12 @@ from app.domain.entities.outbox import OutboxEventType
 from app.domain.entities.payment import PaymentAttempt
 from app.domain.use_cases.payment.process import ProcessPaymentUC
 from app.presenters.payment_consumer.config import PaymentConsumerConfig
+from app.presenters.payment_consumer.schemas import (
+    PaymentMessageSchema,
+    decode_payment_message,
+)
 
 log = logging.getLogger(__name__)
-
-
-class PaymentMessageSchema(BaseModel):
-    payment_id: UUID
-    attempt: int = Field(default=1, ge=1, le=3, strict=True)
 
 
 class PaymentConsumerService(Service):
@@ -59,11 +56,13 @@ class PaymentConsumerService(Service):
         queue = payment_queues(self._config.rabbitmq.retry_delay_seconds)[
             OutboxEventType.PAYMENT_CREATED
         ]
-        self._broker.subscriber(queue, ack_policy=AckPolicy.NACK_ON_ERROR)(self.consume)
+        self._broker.subscriber(
+            queue, ack_policy=AckPolicy.NACK_ON_ERROR, decoder=decode_payment_message
+        )(self.consume)
         await self._broker.start()
         self.start_event.set()
 
-    async def consume(self, message: Mapping[str, Any]) -> None:
+    async def consume(self, message: Any) -> None:
         try:
             envelope = PaymentMessageSchema.model_validate(message)
         except ValidationError as exc:

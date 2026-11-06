@@ -17,12 +17,14 @@ class AbstractUow(ABC):
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        if exc_val:
-            log.info("Rolling back transaction due to exception")
-            await self.rollback()
-        else:
-            await self.commit()
-        await self.close_transaction(exc_type, exc_val, exc_tb)
+        try:
+            if exc_val:
+                log.info("Rolling back transaction due to exception")
+                await self.rollback()
+            else:
+                await self.commit()
+        finally:
+            await self.close_transaction(exc_type, exc_val, exc_tb)
 
     @abstractmethod
     async def commit(self) -> None:

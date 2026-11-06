@@ -106,6 +106,9 @@ class ProcessPaymentUC(IUseCase[PaymentAttempt, Payment | None]):
         except Exception as exc:
             log.exception("Payment attempt failed for %s", payment.id)
             async with self._uow:
+                payment = await self._payment_storage.get_by_id(input_dto=input_dto.id)
+                if payment is None:
+                    return None
                 payment = await self._payment_storage.complete_attempt(
                     input_dto=failed_attempt(payment, token, type(exc).__name__)
                 )

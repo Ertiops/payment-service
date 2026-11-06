@@ -9,7 +9,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from aio_pika import connect_robust
+from aio_pika import DeliveryMode, Message, connect_robust
 from aiohttp import web
 from httpx import AsyncClient, HTTPError
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -209,6 +209,34 @@ async def exercise_runtime(
                     recovery_accepted["payment_id"],
                     "completed",
                 )
+                poisons = [b"[]", b'"text"', b"not-json"]
+                quarantined = []
+                async with await connect_robust(rabbit.dsn) as connection:
+                    channel = await connection.channel()
+                    for index, body in enumerate(poisons):
+                        await channel.default_exchange.publish(
+                            Message(
+                                body=body,
+                                content_type="application/json",
+                                message_id=f"malformed-{index}",
+                                delivery_mode=DeliveryMode.PERSISTENT,
+                            ),
+                            routing_key="payments.new",
+                            mandatory=True,
+                        )
+                    queue = await channel.get_queue("payments.new.dlq")
+                    for _ in range(80):
+                        message = await queue.get(fail=False)
+                        if message is not None:
+                            quarantined.append(message.body)
+                            await message.ack()
+                        if len(quarantined) == len(poisons):
+                            break
+                        await asyncio.sleep(0.1)
+                after_poison_accepted, _, _ = await create("after-poison")
+                after_poison = await wait_payment(
+                    client, after_poison_accepted["payment_id"], "completed"
+                )
                 await asyncio.sleep(0.2)
                 timing = [
                     calls["eventual"][i + 1][0] - calls["eventual"][i][0]
@@ -243,6 +271,11 @@ async def exercise_runtime(
                         len(calls["recover"]),
                         calls["recover"][0][1] == calls["recover"][1][1],
                     ),
+                    "quarantined": sorted(quarantined),
+                    "after_poison": (
+                        after_poison["processing_attempts"],
+                        after_poison["notification"]["webhook_attempts"],
+                    ),
                 }
                 assert observed == {
                     "eventual": ("succeeded", 3, 3),
@@ -255,6 +288,8 @@ async def exercise_runtime(
                         "attempt": 3,
                     },
                     "recovered": ("succeeded", 2, 2, 2, True),
+                    "quarantined": sorted(poisons),
+                    "after_poison": (1, 1),
                 }
             for process in reversed(processes):
                 await stop_process(process)

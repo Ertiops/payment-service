@@ -47,6 +47,8 @@ addopts = "-p no:cacheprovider"
 [tool.coverage.run]
 branch = true
 parallel = true
+patch = ["subprocess"]
+sigterm = true
 source = ["app"]
 command_line = "-m pytest -n auto"
 omit = [

@@ -67,6 +67,8 @@ including starts lost during a crash; they are not confirmed HTTP deliveries.
 
 Any non-2xx webhook response, network error or timeout uses this same budget,
 including 4xx responses. Webhook failure never reverses the known payment result.
+Redirects are not followed: 3xx is also a failed attempt, and the redirect target
+receives no implicit request.
 If no gateway result was obtained, the payment stays pending with processing
 exhausted and notification not sent.
 
@@ -183,6 +185,9 @@ them afterwards. It starts actual API/worker processes, receives real HTTP
 webhooks, measures both TTL delays, reads DLQ, kills the worker during an unknown
 webhook outcome and verifies recovery. Gateway delays are shortened in that
 test only; processing delays remain 1/2 seconds.
+Malformed JSON/array/string envelopes are checked through the actual subscriber
+and must reach quarantine without blocking the next valid payment. Additional
+regressions cover HTTP 302/307 and a lost response to a committed webhook start.
 
 These automated checks are developer/integration evidence. Owner-facing visual
 QA uses a continuous MP4 recording; no screenshot artifacts are generated.

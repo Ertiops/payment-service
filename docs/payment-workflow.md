@@ -45,6 +45,8 @@ therefore skips the gateway and reuses payment_id, status and processed_at.
 4. Webhook start: fenced UPDATE of notification state and webhook_attempts.
 5. Failure: fenced completion and next retry/DLQ outbox envelope in one UoW.
    Success commits delivered state. Broker ACK follows successful UoW exit.
+   If a prior commit result was unknown, reread durable state before deciding
+   the failure outcome. Session cleanup also runs when commit/rollback raises.
 6. Recovery: lock one expired running row with SKIP LOCKED, fence its token,
    complete it as unknown and write the next envelope in the same UoW.
    Recovery schedules work; only the next consumer claim increments its count.
@@ -65,6 +67,9 @@ Publisher confirms, mandatory routing, persistent messages and return errors
 are enabled. DLQ is declared before consumers start. Broker connection/storage
 failures before durable completion keep the AMQP delivery unacknowledged.
 Malformed envelopes are quarantined; they cannot claim a payment attempt.
+Decoding and envelope validation share this quarantine boundary. Arrays,
+strings and invalid JSON do not escape into infrastructure requeue. Webhook
+redirects are disabled so every non-2xx, including 3xx, follows workflow retry.
 
 Outbox failures keep the event pending, with an independently increasing
 publication counter and capped transport backoff. The consumer's three-start

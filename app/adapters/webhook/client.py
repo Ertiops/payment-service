@@ -26,14 +26,12 @@ class PaymentWebhookClient(BaseHttpClient, IPaymentWebhookSender):
         self._config = config
 
     async def send(self, *, input_dto: SendPaymentWebhook) -> None:
-        await self.send_once(input_dto=input_dto)
-
-    async def send_once(self, *, input_dto: SendPaymentWebhook) -> None:
         await self._make_req(
             method="POST",
             url=URL(input_dto.webhook_url),
             handlers=PAYMENT_WEBHOOK_HANDLERS,
             timeout=self._config.timeout_seconds,
+            allow_redirects=False,
             json={
                 "payment_id": str(input_dto.payment_id),
                 "status": input_dto.status.value,

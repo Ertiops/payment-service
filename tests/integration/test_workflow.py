@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import pytest
 from sqlalchemy import func, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 from uuid6 import uuid7
 
 from app.adapters.database.config import DatabaseConfig
@@ -15,7 +16,6 @@ from app.adapters.database.uow import SqlalchemyUow
 from app.application.exceptions import EntityAlreadyExistsException
 from app.domain.entities.payment import (
     ClaimPaymentAttempt,
-    CreatePayment,
     PaymentAttempt,
     PaymentStatus,
     ProcessPayment,
@@ -28,24 +28,13 @@ from app.domain.use_cases.payment.process import ProcessPaymentUC
 from app.domain.use_cases.payment.recover import RecoverPaymentAttemptUC
 from tests.plugins.use_cases.payment import FakePaymentGateway, FakePaymentWebhookSender
 from tests.utils.durable_database import DurableDatabase, durable_database
+from tests.utils.payment import creation
 
 
 @pytest.fixture
 async def durable_db(db_config: DatabaseConfig) -> AsyncIterator[DurableDatabase]:
     async with durable_database(db_config.dsn) as database:
         yield database
-
-
-def creation(key: str) -> CreatePayment:
-    return CreatePayment(
-        amount=Decimal("10.50"),
-        currency="USD",
-        description="integration",
-        meta_data={"order": "1"},
-        status=PaymentStatus.PENDING,
-        idempotency_key=key,
-        webhook_url="https://example.invalid/webhook",
-    )
 
 
 def create_case(database: DurableDatabase) -> CreatePaymentUC:
@@ -310,3 +299,50 @@ async def test_expired_executor_cannot_write_gateway_result(
             )
         )
     assert stale_result is None
+
+
+class CommitThenFailUow(SqlalchemyUow):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session)
+        self.commits = 0
+
+    async def commit(self) -> None:
+        self.commits += 1
+        await super().commit()
+        if self.commits == 3:
+            raise OSError("Webhook reservation committed but response was lost")
+
+
+async def test_unknown_reservation_commit_uses_durable_webhook_count(
+    durable_db: DurableDatabase,
+) -> None:
+    accepted = await create_case(durable_db).execute(
+        input_dto=creation("commit-unknown")
+    )
+    session = durable_db.sessions()
+    sender = FakePaymentWebhookSender()
+    case = ProcessPaymentUC(
+        uow=CommitThenFailUow(session),
+        payment_storage=PaymentStorage(session),
+        outbox_storage=OutboxStorage(session),
+        payment_gateway=FakePaymentGateway(),
+        payment_webhook_sender=sender,
+        config=ProcessingConfig(),
+    )
+    result = await case.execute(
+        input_dto=PaymentAttempt(
+            id=accepted.payment_id,
+            number=1,
+        )
+    )
+    assert (
+        result.processing_attempts,
+        result.notification.status,
+        result.notification.webhook_attempts,
+        sender.inputs,
+    ) == (
+        1,
+        "retrying",
+        1,
+        [],
+    )
