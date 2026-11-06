@@ -19,6 +19,7 @@ from app.domain.entities.payment import (
     UpdatePayment,
 )
 from tests.utils.common import now_utc
+from tests.utils.payment import initial_notification
 
 
 async def test__create(
@@ -46,6 +47,9 @@ async def test__create(
         processed_at=None,
         created_at=IsDatetime,
         updated_at=IsDatetime,
+        processing_status="ready",
+        processing_attempts=0,
+        notification=initial_notification(),
     )
 
 
@@ -86,6 +90,9 @@ async def test__get_by_id(
         processed_at=db_payment.processed_at,
         created_at=db_payment.created_at,
         updated_at=db_payment.updated_at,
+        processing_status="ready",
+        processing_attempts=0,
+        notification=initial_notification(),
     )
 
 
@@ -135,6 +142,9 @@ async def test__update_by_id(
         processed_at=update_data.processed_at,
         created_at=db_payment.created_at,
         updated_at=IsDatetime,
+        processing_status="ready",
+        processing_attempts=0,
+        notification=initial_notification(),
     )
 
 

@@ -6,10 +6,13 @@ from app.domain.entities.outbox import (
     MarkOutboxAsFailed,
     MarkOutboxAsPublished,
     Outbox,
+    RescheduleOutbox,
 )
 
 
 class IOutboxStorage(Protocol):
+    async def reschedule(self, *, input_dto: RescheduleOutbox) -> Outbox: ...
+
     async def create(self, *, input_dto: CreateOutbox) -> Outbox:
         pass
 

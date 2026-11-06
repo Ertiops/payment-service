@@ -1,4 +1,5 @@
 from collections.abc import Awaitable, Callable
+from datetime import timedelta
 
 import pytest
 from dirty_equals import IsDatetime, IsUUID
@@ -15,6 +16,7 @@ from app.domain.entities.outbox import (
     Outbox,
     OutboxEventType,
     OutboxStatus,
+    RescheduleOutbox,
 )
 from tests.utils.common import now_utc
 
@@ -55,9 +57,7 @@ async def test__get_to_publish(
     )
     outbox = await outbox_storage.get_to_publish(
         input_dto=GetOutboxToPublish(
-            event_type=OutboxEventType.PAYMENT_CREATED,
-            status=OutboxStatus.PENDING,
-            max_attempts=3,
+            now=now_utc(),
         )
     )
     assert outbox == Outbox(
@@ -79,9 +79,7 @@ async def test__get_to_publish__none(
     assert (
         await outbox_storage.get_to_publish(
             input_dto=GetOutboxToPublish(
-                event_type=OutboxEventType.PAYMENT_CREATED,
-                status=OutboxStatus.PENDING,
-                max_attempts=3,
+                now=now_utc(),
             )
         )
         is None
@@ -174,3 +172,36 @@ async def test__mark_as_failed__entity_not_found_exception(
                 last_error="publish failed",
             )
         )
+
+
+async def test_publication_reschedule_preserves_event_and_sets_due_time(
+    outbox_storage: OutboxStorage,
+    create_outbox: Callable[..., Awaitable[OutboxTable]],
+) -> None:
+    row = await create_outbox(attempts=100)
+    due = now_utc() + timedelta(seconds=30)
+    result = await outbox_storage.reschedule(
+        input_dto=RescheduleOutbox(
+            id=row.id,
+            attempts=101,
+            last_error="offline",
+            available_at=due,
+        )
+    )
+    assert (
+        result.id,
+        result.event_type,
+        result.payload,
+        result.status,
+        result.attempts,
+        result.last_error,
+        row.available_at,
+    ) == (
+        row.id,
+        row.event_type,
+        row.payload,
+        "pending",
+        101,
+        "offline",
+        due,
+    )

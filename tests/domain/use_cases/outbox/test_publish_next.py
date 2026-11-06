@@ -1,130 +1,69 @@
 from collections.abc import Awaitable, Callable
 
-from dirty_equals import IsDatetime
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.database.tables import OutboxTable
 from app.application.exceptions import OutboxPublishException
-from app.domain.entities.outbox import (
-    Outbox,
-    OutboxEventType,
-    OutboxStatus,
-    PublishNextOutbox,
-    PublishOutboxMessage,
-)
+from app.domain.entities.outbox import PublishNextOutbox
 from app.domain.use_cases.outbox.publish_next import PublishNextOutboxUC
 from tests.plugins.use_cases.outbox import FakeOutboxPublisher
 
-
-async def test__publish_next__none(
-    publish_next_outbox_uc: PublishNextOutboxUC,
-) -> None:
-    assert (
-        await publish_next_outbox_uc.execute(
-            input_dto=PublishNextOutbox(
-                event_type=OutboxEventType.PAYMENT_CREATED,
-                max_attempts=3,
-            )
-        )
-        is None
-    )
+POLL = PublishNextOutbox(initial_delay_seconds=1, max_delay_seconds=30)
 
 
-async def test__publish_next(
+async def test_no_pending_event(publish_next_outbox_uc: PublishNextOutboxUC) -> None:
+    assert await publish_next_outbox_uc.execute(input_dto=POLL) is None
+
+
+async def test_publish_preserves_event_id_and_payload(
     publish_next_outbox_uc: PublishNextOutboxUC,
     outbox_publisher: FakeOutboxPublisher,
     create_outbox: Callable[..., Awaitable[OutboxTable]],
 ) -> None:
-    db_outbox = await create_outbox(
-        event_type=OutboxEventType.PAYMENT_CREATED,
-        status=OutboxStatus.PENDING,
-        attempts=0,
-        last_error=None,
-    )
-    outbox = await publish_next_outbox_uc.execute(
-        input_dto=PublishNextOutbox(
-            event_type=OutboxEventType.PAYMENT_CREATED,
-            max_attempts=3,
-        )
-    )
-    assert (outbox, outbox_publisher.messages) == (
-        Outbox(
-            id=db_outbox.id,
-            event_type=db_outbox.event_type,
-            payload=db_outbox.payload,
-            status=OutboxStatus.PUBLISHED,
-            attempts=db_outbox.attempts,
-            last_error=None,
-            published_at=IsDatetime,
-            created_at=db_outbox.created_at,
-            updated_at=IsDatetime,
-        ),
-        [
-            PublishOutboxMessage(
-                id=db_outbox.id,
-                event_type=db_outbox.event_type,
-                payload=db_outbox.payload,
-            )
-        ],
+    row = await create_outbox()
+    result = await publish_next_outbox_uc.execute(input_dto=POLL)
+    assert (result.status, [(m.id, m.payload) for m in outbox_publisher.messages]) == (
+        "published",
+        [(row.id, row.payload)],
     )
 
 
-async def test__publish_next__retry(
+async def test_broker_outage_does_not_exhaust_consumer_budget(
     publish_next_outbox_uc: PublishNextOutboxUC,
     outbox_publisher: FakeOutboxPublisher,
     create_outbox: Callable[..., Awaitable[OutboxTable]],
 ) -> None:
-    outbox_publisher.exception = OutboxPublishException("publish failed")
-    db_outbox = await create_outbox(
-        event_type=OutboxEventType.PAYMENT_CREATED,
-        status=OutboxStatus.PENDING,
-        attempts=0,
-        last_error=None,
-    )
-    outbox = await publish_next_outbox_uc.execute(
-        input_dto=PublishNextOutbox(
-            event_type=OutboxEventType.PAYMENT_CREATED,
-            max_attempts=3,
-        )
-    )
-    assert outbox == Outbox(
-        id=db_outbox.id,
-        event_type=db_outbox.event_type,
-        payload=db_outbox.payload,
-        status=OutboxStatus.PENDING,
-        attempts=1,
-        last_error="publish failed",
-        published_at=db_outbox.published_at,
-        created_at=db_outbox.created_at,
-        updated_at=IsDatetime,
+    outbox_publisher.exception = OutboxPublishException("offline")
+    await create_outbox(attempts=100)
+    result = await publish_next_outbox_uc.execute(input_dto=POLL)
+    assert (result.status, result.attempts, result.last_error) == (
+        "pending",
+        101,
+        "offline",
     )
 
 
-async def test__publish_next__failed(
+async def test_publication_waits_until_transport_backoff_expires(
     publish_next_outbox_uc: PublishNextOutboxUC,
     outbox_publisher: FakeOutboxPublisher,
     create_outbox: Callable[..., Awaitable[OutboxTable]],
 ) -> None:
-    outbox_publisher.exception = OutboxPublishException("publish failed")
-    db_outbox = await create_outbox(
-        event_type=OutboxEventType.PAYMENT_CREATED,
-        status=OutboxStatus.PENDING,
-        attempts=2,
-        last_error=None,
-    )
-    outbox = await publish_next_outbox_uc.execute(
-        input_dto=PublishNextOutbox(
-            event_type=OutboxEventType.PAYMENT_CREATED,
-            max_attempts=3,
-        )
-    )
-    assert outbox == Outbox(
-        id=db_outbox.id,
-        event_type=db_outbox.event_type,
-        payload=db_outbox.payload,
-        status=OutboxStatus.FAILED,
-        attempts=3,
-        last_error="publish failed",
-        published_at=db_outbox.published_at,
-        created_at=db_outbox.created_at,
-        updated_at=IsDatetime,
-    )
+    outbox_publisher.exception = OutboxPublishException("offline")
+    await create_outbox()
+    await publish_next_outbox_uc.execute(input_dto=POLL)
+    outbox_publisher.exception = None
+    assert await publish_next_outbox_uc.execute(input_dto=POLL) is None
+
+
+async def test_publication_retry_backoff_is_capped(
+    publish_next_outbox_uc: PublishNextOutboxUC,
+    outbox_publisher: FakeOutboxPublisher,
+    create_outbox: Callable[..., Awaitable[OutboxTable]],
+    session: AsyncSession,
+) -> None:
+    outbox_publisher.exception = OutboxPublishException("offline")
+    row = await create_outbox(attempts=100)
+    await publish_next_outbox_uc.execute(input_dto=POLL)
+    stored = await session.scalar(select(OutboxTable).where(OutboxTable.id == row.id))
+    assert 29 <= (stored.available_at - stored.updated_at).total_seconds() <= 31

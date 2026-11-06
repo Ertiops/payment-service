@@ -1,3 +1,4 @@
+import argparse
 import logging
 
 from aiomisc import Service, entrypoint
@@ -14,30 +15,30 @@ log = logging.getLogger(__name__)
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("role", choices=("api", "worker"))
+    role = parser.parse_args().role
     basic_config(level=LogLevel.info, log_format=LogFormat.color)
 
-    rest_config = RestConfig()
-    outbox_relay_config = OutboxRelayConfig()
-    payment_consumer_config = PaymentConsumerConfig()
-    services: list[Service] = [
-        RestService(
-            host=rest_config.host,
-            port=rest_config.port,
-            config=rest_config,
-        ),
-        OutboxRelayService(
-            config=outbox_relay_config,
-        ),
-        PaymentConsumerService(
-            config=payment_consumer_config,
-        ),
-    ]
-
-    with entrypoint(
-        *services,
-        pool_size=4,
-        debug=rest_config.app.debug,
-    ) as loop:
+    services: list[Service]
+    if role == "api":
+        rest_config = RestConfig()
+        services = [
+            RestService(
+                host=rest_config.host,
+                port=rest_config.port,
+                config=rest_config,
+            )
+        ]
+        debug = rest_config.app.debug
+    else:
+        consumer_config = PaymentConsumerConfig()
+        services = [
+            OutboxRelayService(config=OutboxRelayConfig()),
+            PaymentConsumerService(config=consumer_config),
+        ]
+        debug = consumer_config.app.debug
+    with entrypoint(*services, pool_size=4, debug=debug) as loop:
         loop.run_forever()
 
 

@@ -14,8 +14,7 @@ async def handle_success(response: ClientResponse) -> None:
 
 
 async def raise_webhook_delivery_exception(response: ClientResponse) -> None:
-    content = (await response.read()).decode()
-    log.warning("WEBHOOK_DELIVERY_FAILED: %s, CONTENT: %s", response.status, content)
+    log.warning("WEBHOOK_DELIVERY_FAILED: %s", response.status)
     raise WebhookDeliveryException("Webhook delivery failed")
 
 

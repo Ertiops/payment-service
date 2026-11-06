@@ -4,6 +4,10 @@ from sqlalchemy.exc import NoResultFound
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.database.converters.outbox import convert_outbox_table_to_dto
+from app.adapters.database.outbox_queries import (
+    publication_due_conditions,
+    publication_retry_values,
+)
 from app.adapters.database.tables import OutboxTable
 from app.application.exceptions import EntityNotFoundException
 from app.domain.entities.outbox import (
@@ -12,6 +16,7 @@ from app.domain.entities.outbox import (
     MarkOutboxAsFailed,
     MarkOutboxAsPublished,
     Outbox,
+    RescheduleOutbox,
 )
 from app.domain.interfaces.storages.outbox import IOutboxStorage
 
@@ -39,18 +44,26 @@ class OutboxStorage(IOutboxStorage):
     async def get_to_publish(self, *, input_dto: GetOutboxToPublish) -> Outbox | None:
         stmt = (
             select(OutboxTable)
-            .where(
-                OutboxTable.event_type == input_dto.event_type,
-                OutboxTable.status == input_dto.status,
-                OutboxTable.attempts < input_dto.max_attempts,
-                OutboxTable.deleted_at.is_(None),
-            )
+            .where(*publication_due_conditions(input_dto))
             .order_by(OutboxTable.created_at)
             .limit(1)
             .with_for_update(skip_locked=True)
         )
         result = await self.session.scalar(stmt)
         return convert_outbox_table_to_dto(result=result) if result else None
+
+    async def reschedule(self, *, input_dto: RescheduleOutbox) -> Outbox:
+        stmt = (
+            update(OutboxTable)
+            .where(OutboxTable.id == input_dto.id, OutboxTable.deleted_at.is_(None))
+            .values(**publication_retry_values(input_dto))
+            .returning(OutboxTable)
+        )
+        try:
+            result = (await self.session.scalars(stmt)).one()
+        except NoResultFound as e:
+            raise EntityNotFoundException(entity=Outbox, entity_id=input_dto.id) from e
+        return convert_outbox_table_to_dto(result=result)
 
     async def mark_as_published(self, *, input_dto: MarkOutboxAsPublished) -> Outbox:
         stmt = (

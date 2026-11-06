@@ -1,9 +1,20 @@
+x-application: &application
+  image: payment-service:local
+  build:
+    context: .
+  restart: on-failure:5
+
+x-application-env: &application-env
+  APP_DEBUG: ${APP_DEBUG:-False}
+  APP_DB_DSN: postgresql+asyncpg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@db:5432/${POSTGRES_DB:-app}
+  APP_X_API_KEY: ${APP_X_API_KEY:-secret}
+
 services:
   db:
     image: postgres:16
     restart: on-failure:5
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-app}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
@@ -17,11 +28,11 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   rabbitmq:
-    image: rabbitmq:3-management
+    image: rabbitmq:3.13-management
     restart: on-failure:5
     ports:
-      - "${RABBITMQ_PORT:-5672}:5672"
-      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+      - "127.0.0.1:${RABBITMQ_PORT:-5672}:5672"
+      - "127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
@@ -33,38 +44,40 @@ services:
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
 
-  app:
-    build:
-      context: .
-    restart: on-failure:5
-    command: python -m app
+  api:
+    <<: *application
+    command: python -m app api
     ports:
-      - "${APP_REST_PORT:-8000}:8000"
+      - "127.0.0.1:${APP_REST_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      <<: *application-env
+      APP_REST_HOST: 0.0.0.0
+      APP_REST_PORT: 8000
+
+  worker:
+    <<: *application
+    command: python -m app worker
     depends_on:
       db:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
     environment:
-      APP_TITLE: ${APP_TITLE:-Payment Service}
-      APP_DESCRIPTION: ${APP_DESCRIPTION:-Python REST Payment Service}
-      APP_VERSION: ${APP_VERSION:-1.0.0}
-      APP_DEBUG: ${APP_DEBUG:-False}
-      APP_REST_HOST: 0.0.0.0
-      APP_REST_PORT: 8000
-      APP_X_API_KEY: ${APP_X_API_KEY:-secret}
-      APP_DB_DSN: postgresql+asyncpg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@db:5432/${POSTGRES_DB:-app}
-      APP_DB_POOL_SIZE: ${APP_DB_POOL_SIZE:-10}
-      APP_DB_POOL_TIMEOUT: ${APP_DB_POOL_TIMEOUT:-10}
+      <<: *application-env
       APP_RABBITMQ_DSN: amqp://${RABBITMQ_DEFAULT_USER:-guest}:${RABBITMQ_DEFAULT_PASS:-guest}@rabbitmq:5672/
       APP_OUTBOX_POLL_INTERVAL: ${APP_OUTBOX_POLL_INTERVAL:-1}
-      APP_OUTBOX_MAX_ATTEMPTS: ${APP_OUTBOX_MAX_ATTEMPTS:-3}
+      APP_OUTBOX_INITIAL_DELAY_SECONDS: ${APP_OUTBOX_INITIAL_DELAY_SECONDS:-1}
+      APP_OUTBOX_MAX_DELAY_SECONDS: ${APP_OUTBOX_MAX_DELAY_SECONDS:-30}
+      APP_RETRY_INITIAL_DELAY_SECONDS: ${APP_RETRY_INITIAL_DELAY_SECONDS:-1}
+      APP_PROCESSING_LEASE_SECONDS: ${APP_PROCESSING_LEASE_SECONDS:-30}
+      APP_GATEWAY_TIMEOUT_SECONDS: ${APP_GATEWAY_TIMEOUT_SECONDS:-10}
       APP_PAYMENT_GATEWAY_MIN_DELAY_SECONDS: ${APP_PAYMENT_GATEWAY_MIN_DELAY_SECONDS:-2}
       APP_PAYMENT_GATEWAY_MAX_DELAY_SECONDS: ${APP_PAYMENT_GATEWAY_MAX_DELAY_SECONDS:-5}
       APP_PAYMENT_GATEWAY_SUCCESS_RATE: ${APP_PAYMENT_GATEWAY_SUCCESS_RATE:-0.9}
       APP_WEBHOOK_TIMEOUT_SECONDS: ${APP_WEBHOOK_TIMEOUT_SECONDS:-5}
-      APP_WEBHOOK_MAX_ATTEMPTS: ${APP_WEBHOOK_MAX_ATTEMPTS:-3}
-      APP_WEBHOOK_INITIAL_DELAY_SECONDS: ${APP_WEBHOOK_INITIAL_DELAY_SECONDS:-1}
       APP_WEBHOOK_BASE_URL: ${APP_WEBHOOK_BASE_URL:-http://webhook.site}
 
 volumes:

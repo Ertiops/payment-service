@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from httpx import AsyncClient
 
+from app.adapters.database.converters.payment import convert_payment_table_to_dto
 from app.presenters.rest.routers.api.v1.schemas.payment import PaymentSchema
 from tests.plugins.factories.payment import PaymentTable
 
@@ -55,9 +56,9 @@ async def test__get_by_id__ok__response(
         f"/api/v1/payments/{db_payment.id}/",
         headers=await create_auth_headers(),
     )
-    assert response.json() == PaymentSchema.model_validate(db_payment).model_dump(
-        mode="json"
-    )
+    assert response.json() == PaymentSchema.model_validate(
+        convert_payment_table_to_dto(result=db_payment)
+    ).model_dump(mode="json")
 
 
 async def test__get_by_id__not_found__status(

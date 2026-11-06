@@ -2,9 +2,11 @@ from collections.abc import AsyncIterator
 
 from dishka import Provider, Scope, provide
 from faststream.rabbit import RabbitBroker
+from faststream.rabbit.schemas.channel import Channel
 
 from app.adapters.rabbitmq.config import RabbitMQConfig
 from app.adapters.rabbitmq.publishers.outbox import RabbitMQOutboxPublisher
+from app.adapters.rabbitmq.topology import declare_payment_topology
 from app.domain.interfaces.publishers.outbox import IOutboxPublisher
 
 
@@ -15,11 +17,17 @@ class RabbitMQProvider(Provider):
 
     @provide(scope=Scope.APP)
     async def rabbit_broker(self) -> AsyncIterator[RabbitBroker]:
-        broker = RabbitBroker(self._config.dsn)
+        broker = RabbitBroker(
+            self._config.dsn,
+            default_channel=Channel(publisher_confirms=True, on_return_raises=True),
+        )
         await broker.start()
-        yield broker
-        await broker.stop()
+        try:
+            await declare_payment_topology(broker, self._config)
+            yield broker
+        finally:
+            await broker.stop()
 
     @provide(scope=Scope.REQUEST)
     def outbox_publisher(self, broker: RabbitBroker) -> IOutboxPublisher:
-        return RabbitMQOutboxPublisher(broker=broker)
+        return RabbitMQOutboxPublisher(broker=broker, config=self._config)

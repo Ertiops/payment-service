@@ -43,11 +43,7 @@ async def create(
             webhook_url=str(body.webhook_url),
         )
     )
-    return PaymentAcceptedSchema(
-        payment_id=payment.id,
-        status=payment.status,
-        created_at=payment.created_at,
-    )
+    return PaymentAcceptedSchema.model_validate(payment)
 
 
 @router.get(

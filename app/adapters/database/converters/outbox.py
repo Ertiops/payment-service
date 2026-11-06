@@ -1,5 +1,5 @@
 from app.adapters.database.tables import OutboxTable
-from app.domain.entities.outbox import Outbox
+from app.domain.entities.outbox import Outbox, OutboxEventType
 
 
 def convert_outbox_table_to_dto(
@@ -8,7 +8,7 @@ def convert_outbox_table_to_dto(
 ) -> Outbox:
     return Outbox(
         id=result.id,
-        event_type=result.event_type,
+        event_type=OutboxEventType(result.event_type),
         payload=result.payload,
         status=result.status,
         attempts=result.attempts,

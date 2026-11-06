@@ -9,6 +9,9 @@ from uuid import UUID
 @unique
 class OutboxEventType(StrEnum):
     PAYMENT_CREATED = "payments.new"
+    PAYMENT_RETRY_1 = "payments.retry.1"
+    PAYMENT_RETRY_2 = "payments.retry.2"
+    PAYMENT_DEAD_LETTER = "payments.new.dlq"
 
 
 @unique
@@ -43,9 +46,7 @@ class CreateOutbox:
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class GetOutboxToPublish:
-    event_type: OutboxEventType
-    status: OutboxStatus
-    max_attempts: int
+    now: datetime
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -73,5 +74,13 @@ class PublishOutboxMessage:
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class PublishNextOutbox:
-    event_type: OutboxEventType
-    max_attempts: int
+    initial_delay_seconds: float
+    max_delay_seconds: float
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class RescheduleOutbox:
+    id: UUID
+    attempts: int
+    last_error: str
+    available_at: datetime

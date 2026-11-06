@@ -1,4 +1,5 @@
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from polyfactory.factories.sqlalchemy_factory import SQLAlchemyFactory
@@ -10,6 +11,10 @@ from tests.plugins.factories.utils.mixins import TimestampedFactoryMixin
 
 
 class OutboxTableFactory(SQLAlchemyFactory[OutboxTable], TimestampedFactoryMixin):
+    @classmethod
+    def available_at(cls) -> datetime:
+        return datetime.now(tz=UTC) - timedelta(seconds=1)
+
     @classmethod
     def event_type(cls) -> OutboxEventType:
         return OutboxEventType.PAYMENT_CREATED

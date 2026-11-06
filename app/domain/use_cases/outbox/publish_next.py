@@ -1,15 +1,15 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from app.application.exceptions import OutboxPublishException
 from app.application.use_case import IUseCase
 from app.domain.entities.outbox import (
     GetOutboxToPublish,
-    MarkOutboxAsFailed,
     MarkOutboxAsPublished,
     Outbox,
     OutboxStatus,
     PublishNextOutbox,
     PublishOutboxMessage,
+    RescheduleOutbox,
 )
 from app.domain.interfaces.publishers.outbox import IOutboxPublisher
 from app.domain.interfaces.storages.outbox import IOutboxStorage
@@ -31,9 +31,7 @@ class PublishNextOutboxUC(IUseCase[PublishNextOutbox, Outbox | None]):
         async with self._uow:
             outbox = await self._outbox_storage.get_to_publish(
                 input_dto=GetOutboxToPublish(
-                    event_type=input_dto.event_type,
-                    status=OutboxStatus.PENDING,
-                    max_attempts=input_dto.max_attempts,
+                    now=datetime.now(tz=UTC),
                 )
             )
             if outbox is None:
@@ -49,16 +47,16 @@ class PublishNextOutboxUC(IUseCase[PublishNextOutbox, Outbox | None]):
                 )
             except OutboxPublishException as e:
                 attempts = outbox.attempts + 1
-                return await self._outbox_storage.mark_as_failed(
-                    input_dto=MarkOutboxAsFailed(
+                delay = min(
+                    input_dto.initial_delay_seconds * 2 ** min(attempts - 1, 30),
+                    input_dto.max_delay_seconds,
+                )
+                return await self._outbox_storage.reschedule(
+                    input_dto=RescheduleOutbox(
                         id=outbox.id,
-                        status=(
-                            OutboxStatus.FAILED
-                            if attempts >= input_dto.max_attempts
-                            else OutboxStatus.PENDING
-                        ),
                         attempts=attempts,
-                        last_error=str(e),
+                        last_error=str(e)[:2000],
+                        available_at=datetime.now(tz=UTC) + timedelta(seconds=delay),
                     )
                 )
 

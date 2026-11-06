@@ -6,6 +6,7 @@ from app.domain.interfaces.gateways.payment import IPaymentGateway
 from app.domain.interfaces.storages.outbox import IOutboxStorage
 from app.domain.interfaces.storages.payment import IPaymentStorage
 from app.domain.interfaces.webhooks.payment import IPaymentWebhookSender
+from app.domain.processing import ProcessingConfig
 from app.domain.uow import AbstractUow
 from app.domain.use_cases.payment.create import CreatePaymentUC
 from app.domain.use_cases.payment.get_by_id import GetPaymentByIdUC
@@ -71,12 +72,15 @@ def get_payment_by_id_uc(
 def process_payment_uc(
     uow: AbstractUow,
     payment_storage: IPaymentStorage,
+    outbox_storage: IOutboxStorage,
     payment_gateway: FakePaymentGateway,
     payment_webhook_sender: FakePaymentWebhookSender,
 ) -> ProcessPaymentUC:
     return ProcessPaymentUC(
         uow=uow,
         payment_storage=payment_storage,
+        outbox_storage=outbox_storage,
         payment_gateway=payment_gateway,
         payment_webhook_sender=payment_webhook_sender,
+        config=ProcessingConfig(),
     )

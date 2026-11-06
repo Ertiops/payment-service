@@ -36,7 +36,7 @@ from app.presenters.rest.routers.api.v1.exception_handlers import (
 log = logging.getLogger(__name__)
 
 
-ExceptionHandlersType = tuple[tuple[type[Exception], Callable], ...]
+ExceptionHandlersType = tuple[tuple[type[Exception], Callable[..., Any]], ...]
 
 EXCEPTION_HANDLERS: Final[ExceptionHandlersType] = (
     (HTTPException, http_exception_handler),

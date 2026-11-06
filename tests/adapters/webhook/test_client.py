@@ -10,7 +10,6 @@ from yarl import URL
 from app.adapters.webhook.client import PaymentWebhookClient
 from app.adapters.webhook.config import WebhookConfig
 from app.adapters.webhook.handlers import PAYMENT_WEBHOOK_HANDLERS
-from app.application.exceptions import WebhookDeliveryException
 from app.domain.entities.payment import PaymentStatus
 from app.domain.entities.webhook import SendPaymentWebhook
 
@@ -35,8 +34,6 @@ async def test__send_once(
         config=WebhookConfig(
             base_url="http://webhook.test",
             timeout_seconds=7,
-            max_attempts=3,
-            initial_delay_seconds=0,
         ),
     )
     await client.send_once(input_dto=input_dto)
@@ -55,7 +52,7 @@ async def test__send_once(
     ]
 
 
-async def test__send__retry__certificate_error(
+async def test__send__certificate_error_is_not_retried_inline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls = 0
@@ -84,8 +81,6 @@ async def test__send__retry__certificate_error(
         config=WebhookConfig(
             base_url="http://webhook.test",
             timeout_seconds=7,
-            max_attempts=3,
-            initial_delay_seconds=0,
         ),
     )
     certificate_error_raised = False
@@ -93,10 +88,10 @@ async def test__send__retry__certificate_error(
         await client.send(input_dto=input_dto)
     except ClientConnectorCertificateError:
         certificate_error_raised = True
-    assert (certificate_error_raised, calls) == (True, 3)
+    assert (certificate_error_raised, calls) == (True, 1)
 
 
-async def test__send__retry__success(
+async def test__send__success_makes_one_attempt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls = 0
@@ -114,8 +109,6 @@ async def test__send__retry__success(
     ) -> None:
         nonlocal calls
         calls += 1
-        if calls < 3:
-            raise WebhookDeliveryException("Webhook delivery failed")
 
     monkeypatch.setattr(PaymentWebhookClient, "send_once", send_once)
     client = PaymentWebhookClient(
@@ -123,9 +116,7 @@ async def test__send__retry__success(
         config=WebhookConfig(
             base_url="http://webhook.test",
             timeout_seconds=7,
-            max_attempts=3,
-            initial_delay_seconds=0,
         ),
     )
     await client.send(input_dto=input_dto)
-    assert calls == 3
+    assert calls == 1

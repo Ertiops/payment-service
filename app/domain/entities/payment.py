@@ -24,6 +24,33 @@ class PaymentStatus(StrEnum):
     FAILED = "failed"
 
 
+@unique
+class ProcessingStatus(StrEnum):
+    READY = "ready"
+    RUNNING = "running"
+    RETRYING = "retrying"
+    COMPLETED = "completed"
+    EXHAUSTED = "exhausted"
+
+
+@unique
+class NotificationStatus(StrEnum):
+    NOT_SENT = "not_sent"
+    SENDING = "sending"
+    RETRYING = "retrying"
+    DELIVERED = "delivered"
+    FAILED = "failed"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class PaymentNotification:
+    status: NotificationStatus
+    webhook_attempts: int
+    delivered_at: datetime | None
+    last_error: str | None
+
+
 @dataclass(frozen=True, kw_only=True, slots=True)
 class Payment:
     id: UUID
@@ -37,6 +64,9 @@ class Payment:
     processed_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    processing_status: ProcessingStatus
+    processing_attempts: int
+    notification: PaymentNotification
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -48,6 +78,13 @@ class CreatePayment:
     status: PaymentStatus
     idempotency_key: str
     webhook_url: str
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class AcceptedPayment:
+    payment_id: UUID
+    status: PaymentStatus
+    created_at: datetime
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -66,3 +103,57 @@ class UpdatePayment(ToDictMixin):
 @dataclass(frozen=True, kw_only=True, slots=True)
 class ProcessPayment:
     id: UUID
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class PaymentAttempt:
+    id: UUID
+    number: int
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class GetPaymentByKey:
+    key: str
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class ClaimPaymentAttempt:
+    id: UUID
+    number: int
+    token: UUID
+    lease_seconds: float
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class PaymentClaim:
+    id: UUID
+    token: UUID
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class SaveGatewayResult:
+    id: UUID
+    token: UUID
+    status: PaymentStatus
+    processed_at: datetime
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class CompletePaymentAttempt:
+    id: UUID
+    token: UUID
+    processing_status: ProcessingStatus
+    notification_status: NotificationStatus
+    delivered_at: datetime | None
+    last_error: str | None
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class ExpiredPaymentAttempt:
+    payment: Payment
+    token: UUID
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class RecoverPaymentAttempt:
+    now: datetime
