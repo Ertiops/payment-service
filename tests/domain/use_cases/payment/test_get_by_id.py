@@ -8,6 +8,7 @@ from app.application.exceptions import EntityNotFoundException
 from app.domain.entities.payment import Payment
 from app.domain.use_cases.payment.get_by_id import GetPaymentByIdUC
 from tests.utils.common import now_utc
+from tests.utils.payment import initial_notification
 
 
 async def test__get_by_id(
@@ -28,6 +29,9 @@ async def test__get_by_id(
         processed_at=db_payment.processed_at,
         created_at=db_payment.created_at,
         updated_at=db_payment.updated_at,
+        processing_status="ready",
+        processing_attempts=0,
+        notification=initial_notification(),
     )
 
 

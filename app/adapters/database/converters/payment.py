@@ -1,5 +1,10 @@
 from app.adapters.database.tables import PaymentTable
-from app.domain.entities.payment import Payment
+from app.domain.entities.payment import (
+    NotificationStatus,
+    Payment,
+    PaymentNotification,
+    ProcessingStatus,
+)
 
 
 def convert_payment_table_to_dto(
@@ -18,4 +23,12 @@ def convert_payment_table_to_dto(
         processed_at=result.processed_at,
         created_at=result.created_at,
         updated_at=result.updated_at,
+        processing_status=ProcessingStatus(result.processing_status),
+        processing_attempts=result.processing_attempts,
+        notification=PaymentNotification(
+            status=NotificationStatus(result.notification_status),
+            webhook_attempts=result.webhook_attempts,
+            delivered_at=result.delivered_at,
+            last_error=result.last_error if result.webhook_attempts else None,
+        ),
     )

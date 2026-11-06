@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from math import isfinite
 from os import environ
 
 
@@ -12,11 +13,7 @@ class WebhookConfig:
     timeout_seconds: float = field(
         default_factory=lambda: float(environ.get("APP_WEBHOOK_TIMEOUT_SECONDS", "5"))
     )
-    max_attempts: int = field(
-        default_factory=lambda: int(environ.get("APP_WEBHOOK_MAX_ATTEMPTS", "3"))
-    )
-    initial_delay_seconds: float = field(
-        default_factory=lambda: float(
-            environ.get("APP_WEBHOOK_INITIAL_DELAY_SECONDS", "1")
-        )
-    )
+
+    def __post_init__(self) -> None:
+        if not isfinite(self.timeout_seconds) or self.timeout_seconds <= 0:
+            raise ValueError("Webhook timeout must be finite and positive")

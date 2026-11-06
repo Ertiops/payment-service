@@ -1,4 +1,3 @@
-from alembic.command import upgrade
 from alembic.config import Config as AlembicConfig
 from alembic.script import ScriptDirectory
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -16,13 +15,12 @@ async def test__up_to_date(engine: AsyncEngine) -> None:
     assert not diff
 
 
-def test__sequential_apply(
+def test__single_initial_revision(
     alembic_config: AlembicConfig,
-    engine: AsyncEngine,
 ) -> None:
     script = ScriptDirectory.from_config(alembic_config)
     revisions = list(script.walk_revisions(base="base", head="heads"))
-    revisions.reverse()
-    for revision in revisions:
-        upgrade(alembic_config, revision.revision)
-    assert True
+    assert (script.get_heads(), [(r.revision, r.down_revision) for r in revisions]) == (
+        ["0001"],
+        [("0001", None)],
+    )

@@ -24,10 +24,10 @@ RUN pip install --no-cache-dir -U pip uv
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
-COPY app ./app
+COPY --chown=appuser:appuser app ./app
 
 USER appuser
 
 EXPOSE 8000
 
-CMD ["python", "-m", "app"]
+CMD ["python", "-m", "app", "api"]

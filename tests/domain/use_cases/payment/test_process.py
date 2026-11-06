@@ -1,154 +1,165 @@
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
-import pytest
-from dirty_equals import IsDatetime
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from uuid6 import uuid7
 
-from app.adapters.database.tables import PaymentTable
-from app.domain.entities.payment import (
-    Payment,
-    PaymentStatus,
-    ProcessPayment,
-)
-from app.domain.entities.webhook import SendPaymentWebhook
+from app.adapters.database.tables import OutboxTable, PaymentTable
+from app.domain.entities.payment import PaymentAttempt, PaymentStatus
 from app.domain.use_cases.payment.process import ProcessPaymentUC
 from tests.plugins.use_cases.payment import FakePaymentGateway, FakePaymentWebhookSender
 
 
-async def test__process(
-    process_payment_uc: ProcessPaymentUC,
-    payment_webhook_sender: FakePaymentWebhookSender,
-    create_payment: Callable[..., Awaitable[PaymentTable]],
-) -> None:
-    db_payment = await create_payment(
-        status=PaymentStatus.PENDING,
-        processed_at=None,
-    )
-    payment = await process_payment_uc.execute(
-        input_dto=ProcessPayment(id=db_payment.id)
-    )
-    assert (payment, payment_webhook_sender.inputs) == (
-        Payment(
-            id=db_payment.id,
-            amount=db_payment.amount,
-            currency=db_payment.currency,
-            description=db_payment.description,
-            meta_data=db_payment.meta_data,
-            status=PaymentStatus.SUCCEEDED,
-            idempotency_key=db_payment.idempotency_key,
-            webhook_url=db_payment.webhook_url,
-            processed_at=IsDatetime,
-            created_at=db_payment.created_at,
-            updated_at=IsDatetime,
-        ),
-        [
-            SendPaymentWebhook(
-                payment_id=db_payment.id,
-                status=PaymentStatus.SUCCEEDED,
-                processed_at=IsDatetime,
-                webhook_url=db_payment.webhook_url,
-            )
-        ],
-    )
-
-
-async def test__process__failed(
+async def test_process_success(
     process_payment_uc: ProcessPaymentUC,
     payment_gateway: FakePaymentGateway,
     payment_webhook_sender: FakePaymentWebhookSender,
     create_payment: Callable[..., Awaitable[PaymentTable]],
 ) -> None:
-    payment_gateway.status = PaymentStatus.FAILED
-    db_payment = await create_payment(
-        status=PaymentStatus.PENDING,
-        processed_at=None,
+    row = await create_payment(status=PaymentStatus.PENDING, processed_at=None)
+    result = await process_payment_uc.execute(
+        input_dto=PaymentAttempt(id=row.id, number=1)
     )
-    payment = await process_payment_uc.execute(
-        input_dto=ProcessPayment(id=db_payment.id)
-    )
-    assert (payment, payment_webhook_sender.inputs) == (
-        Payment(
-            id=db_payment.id,
-            amount=db_payment.amount,
-            currency=db_payment.currency,
-            description=db_payment.description,
-            meta_data=db_payment.meta_data,
-            status=PaymentStatus.FAILED,
-            idempotency_key=db_payment.idempotency_key,
-            webhook_url=db_payment.webhook_url,
-            processed_at=IsDatetime,
-            created_at=db_payment.created_at,
-            updated_at=IsDatetime,
-        ),
-        [
-            SendPaymentWebhook(
-                payment_id=db_payment.id,
-                status=PaymentStatus.FAILED,
-                processed_at=IsDatetime,
-                webhook_url=db_payment.webhook_url,
-            )
-        ],
-    )
-
-
-async def test__process__none__not_found(
-    process_payment_uc: ProcessPaymentUC,
-) -> None:
     assert (
-        await process_payment_uc.execute(input_dto=ProcessPayment(id=uuid7())) is None
-    )
+        result.status,
+        result.processing_status,
+        result.processing_attempts,
+        result.notification.status,
+        result.notification.webhook_attempts,
+        len(payment_gateway.inputs),
+        [dto.status for dto in payment_webhook_sender.inputs],
+    ) == ("succeeded", "completed", 1, "delivered", 1, 1, ["succeeded"])
 
 
-async def test__process__already_processed(
+async def test_business_decline_is_final_and_notifies_client(
     process_payment_uc: ProcessPaymentUC,
     payment_gateway: FakePaymentGateway,
     payment_webhook_sender: FakePaymentWebhookSender,
     create_payment: Callable[..., Awaitable[PaymentTable]],
 ) -> None:
-    db_payment = await create_payment(
-        status=PaymentStatus.SUCCEEDED,
-        processed_at=datetime.now(tz=UTC),
-    )
     payment_gateway.status = PaymentStatus.FAILED
-    payment = await process_payment_uc.execute(
-        input_dto=ProcessPayment(id=db_payment.id)
+    row = await create_payment(status=PaymentStatus.PENDING, processed_at=None)
+    result = await process_payment_uc.execute(
+        input_dto=PaymentAttempt(id=row.id, number=1)
     )
-    assert (payment, payment_gateway.inputs, payment_webhook_sender.inputs) == (
-        Payment(
-            id=db_payment.id,
-            amount=db_payment.amount,
-            currency=db_payment.currency,
-            description=db_payment.description,
-            meta_data=db_payment.meta_data,
-            status=PaymentStatus.SUCCEEDED,
-            idempotency_key=db_payment.idempotency_key,
-            webhook_url=db_payment.webhook_url,
-            processed_at=IsDatetime,
-            created_at=db_payment.created_at,
-            updated_at=IsDatetime,
-        ),
-        [],
-        [
-            SendPaymentWebhook(
-                payment_id=db_payment.id,
-                status=PaymentStatus.SUCCEEDED,
-                processed_at=IsDatetime,
-                webhook_url=db_payment.webhook_url,
-            )
-        ],
+    assert (
+        result.status,
+        result.processing_status,
+        [dto.status for dto in payment_webhook_sender.inputs],
+    ) == (
+        "failed",
+        "completed",
+        ["failed"],
     )
 
 
-async def test__process__webhook_exception(
+async def test_missing_payment_is_a_noop(process_payment_uc: ProcessPaymentUC) -> None:
+    assert (
+        await process_payment_uc.execute(input_dto=PaymentAttempt(id=uuid7(), number=1))
+        is None
+    )
+
+
+async def test_known_gateway_result_is_not_processed_again(
+    process_payment_uc: ProcessPaymentUC,
+    payment_gateway: FakePaymentGateway,
+    create_payment: Callable[..., Awaitable[PaymentTable]],
+) -> None:
+    row = await create_payment(
+        status=PaymentStatus.SUCCEEDED, processed_at=datetime.now(tz=UTC)
+    )
+    await process_payment_uc.execute(input_dto=PaymentAttempt(id=row.id, number=1))
+    assert payment_gateway.inputs == []
+
+
+async def test_webhook_failure_schedules_one_durable_retry(
     process_payment_uc: ProcessPaymentUC,
     payment_webhook_sender: FakePaymentWebhookSender,
+    session: AsyncSession,
     create_payment: Callable[..., Awaitable[PaymentTable]],
 ) -> None:
     payment_webhook_sender.exception = RuntimeError("webhook failed")
-    db_payment = await create_payment(
-        status=PaymentStatus.PENDING,
-        processed_at=None,
+    row = await create_payment(status=PaymentStatus.PENDING, processed_at=None)
+    result = await process_payment_uc.execute(
+        input_dto=PaymentAttempt(id=row.id, number=1)
     )
-    with pytest.raises(RuntimeError):
-        await process_payment_uc.execute(input_dto=ProcessPayment(id=db_payment.id))
+    event = await session.scalar(select(OutboxTable))
+    assert (
+        result.status,
+        result.processing_status,
+        result.processing_attempts,
+        result.notification.status,
+        result.notification.webhook_attempts,
+        event.event_type,
+        event.payload,
+    ) == (
+        "succeeded",
+        "retrying",
+        1,
+        "retrying",
+        1,
+        "payments.retry.1",
+        {"payment_id": str(row.id), "attempt": 2},
+    )
+
+
+async def test_duplicate_envelope_does_not_send_again(
+    process_payment_uc: ProcessPaymentUC,
+    payment_gateway: FakePaymentGateway,
+    payment_webhook_sender: FakePaymentWebhookSender,
+    create_payment: Callable[..., Awaitable[PaymentTable]],
+) -> None:
+    row = await create_payment(status=PaymentStatus.PENDING, processed_at=None)
+    dto = PaymentAttempt(id=row.id, number=1)
+    await process_payment_uc.execute(input_dto=dto)
+    replay = await process_payment_uc.execute(input_dto=dto)
+    assert (
+        replay,
+        len(payment_gateway.inputs),
+        len(payment_webhook_sender.inputs),
+    ) == (
+        None,
+        1,
+        1,
+    )
+
+
+async def test_three_webhook_failures_exhaust_shared_budget(
+    process_payment_uc: ProcessPaymentUC,
+    payment_gateway: FakePaymentGateway,
+    payment_webhook_sender: FakePaymentWebhookSender,
+    session: AsyncSession,
+    create_payment: Callable[..., Awaitable[PaymentTable]],
+) -> None:
+    payment_webhook_sender.exception = RuntimeError("unavailable")
+    row = await create_payment(status=PaymentStatus.PENDING, processed_at=None)
+    for attempt in (1, 2, 3):
+        result = await process_payment_uc.execute(
+            input_dto=PaymentAttempt(id=row.id, number=attempt)
+        )
+    fourth = await process_payment_uc.execute(
+        input_dto=PaymentAttempt(id=row.id, number=4)
+    )
+    events = (
+        await session.scalars(
+            select(OutboxTable).order_by(OutboxTable.created_at, OutboxTable.id)
+        )
+    ).all()
+    assert (
+        result.status,
+        result.processing_status,
+        result.processing_attempts,
+        result.notification.webhook_attempts,
+        len(payment_gateway.inputs),
+        fourth,
+        [(event.event_type, event.payload["attempt"]) for event in events],
+    ) == (
+        "succeeded",
+        "exhausted",
+        3,
+        3,
+        1,
+        None,
+        [("payments.retry.1", 2), ("payments.retry.2", 3), ("payments.new.dlq", 3)],
+    )

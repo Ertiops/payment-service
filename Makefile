@@ -6,11 +6,13 @@ TEST_WORKERS    := 8
 DOCKER_FILENAME := docker-compose.dev.yaml
 PROD_DOCKER_FILENAME := docker-compose.yaml
 PYTHON_VERSION = 3.12
+PYTHON := .venv/bin/python
+ROLE ?= api
 
 
 
 PIP      := .venv/bin/pip
-UV       := .venv/bin/uv
+UV       := $(if $(wildcard .venv/bin/uv),.venv/bin/uv,uv)
 RUFF     := $(UV) run .venv/bin/ruff
 MYPY     := $(UV) run .venv/bin/mypy
 PYTEST   := $(UV) run .venv/bin/pytest
@@ -43,8 +45,8 @@ local_down: ## Stop local stack and remove volumes
 prod: ## Start production stack
 	docker compose -f $(PROD_DOCKER_FILENAME) up --build --force-recreate --remove-orphans
 
-prod-apply-migrations: ## Apply migrations in production docker compose app service
-	docker compose -f $(PROD_DOCKER_FILENAME) run --rm app python -m $(PROJECT_NAME).adapters.database upgrade head
+prod-apply-migrations: ## Apply migrations in the Compose API image
+	docker compose -f $(PROD_DOCKER_FILENAME) run --rm api python -m $(PROJECT_NAME).adapters.database upgrade head
 
 local-create-migrations:
 	$(ALEMBIC) revision --autogenerate
@@ -86,8 +88,8 @@ lint-ci: ## Run linters in CI without formatting
 	@$(MAKE) mypy
 
 
-app: ## Start uvicorn in reload mode
-	$(UV) run python -m $(PROJECT_NAME)
+app: ## Start a role, e.g. make app ROLE=worker
+	$(UV) run python -m $(PROJECT_NAME) $(ROLE)
 
 
 help: ## Show this help

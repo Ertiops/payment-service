@@ -5,7 +5,7 @@ from uuid import UUID
 from dishka.integrations.fastapi import DishkaRoute, FromDishka
 from fastapi import APIRouter, Header
 
-from app.domain.entities.payment import CreatePayment, PaymentStatus
+from app.domain.entities.payment import CreatePayment
 from app.domain.use_cases.payment.create import CreatePaymentUC
 from app.domain.use_cases.payment.get_by_id import GetPaymentByIdUC
 from app.presenters.rest.routers.api.v1.schemas.payment import (
@@ -38,16 +38,11 @@ async def create(
             currency=body.currency,
             description=body.description,
             meta_data=body.meta_data,
-            status=PaymentStatus.PENDING,
             idempotency_key=idempotency_key,
             webhook_url=str(body.webhook_url),
         )
     )
-    return PaymentAcceptedSchema(
-        payment_id=payment.id,
-        status=payment.status,
-        created_at=payment.created_at,
-    )
+    return PaymentAcceptedSchema.model_validate(payment)
 
 
 @router.get(

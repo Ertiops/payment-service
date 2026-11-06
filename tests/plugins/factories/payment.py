@@ -1,4 +1,6 @@
 from collections.abc import Awaitable, Callable
+from datetime import datetime
+from uuid import UUID
 
 import pytest
 from polyfactory.factories.sqlalchemy_factory import SQLAlchemyFactory
@@ -9,7 +11,14 @@ from tests.plugins.factories.utils.mixins import TimestampedFactoryMixin
 
 
 class PaymentTableFactory(SQLAlchemyFactory[PaymentTable], TimestampedFactoryMixin):
-    pass
+    processing_status = "ready"
+    processing_attempts = 0
+    notification_status = "not_sent"
+    webhook_attempts = 0
+    delivered_at: datetime | None = None
+    last_error: str | None = None
+    claim_token: UUID | None = None
+    lease_until: datetime | None = None
 
 
 @pytest.fixture

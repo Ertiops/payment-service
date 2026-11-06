@@ -3,7 +3,7 @@ from ssl import SSLCertVerificationError
 from typing import Any, cast
 
 import pytest
-from aiohttp import ClientConnectorCertificateError, ClientSession
+from aiohttp import ClientConnectorCertificateError, ClientError, ClientSession
 from uuid6 import uuid7
 from yarl import URL
 
@@ -15,11 +15,11 @@ from app.domain.entities.payment import PaymentStatus
 from app.domain.entities.webhook import SendPaymentWebhook
 
 
-async def test__send_once(
+async def test_send_performs_one_post_without_following_redirects(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     requests: list[dict[str, Any]] = []
-    input_dto = SendPaymentWebhook(
+    dto = SendPaymentWebhook(
         payment_id=uuid7(),
         status=PaymentStatus.SUCCEEDED,
         processed_at=datetime(2026, 4, 7, tzinfo=UTC),
@@ -32,100 +32,59 @@ async def test__send_once(
     monkeypatch.setattr(PaymentWebhookClient, "_make_req", make_req)
     client = PaymentWebhookClient(
         session=cast(ClientSession, object()),
-        config=WebhookConfig(
-            base_url="http://webhook.test",
-            timeout_seconds=7,
-            max_attempts=3,
-            initial_delay_seconds=0,
-        ),
+        config=WebhookConfig(timeout_seconds=7),
     )
-    await client.send_once(input_dto=input_dto)
+    await client.send(input_dto=dto)
     assert requests == [
         {
             "method": "POST",
-            "url": URL("https://example.com/webhook"),
+            "url": URL(dto.webhook_url),
             "handlers": PAYMENT_WEBHOOK_HANDLERS,
             "timeout": 7,
+            "allow_redirects": False,
             "json": {
-                "payment_id": str(input_dto.payment_id),
-                "status": PaymentStatus.SUCCEEDED.value,
-                "processed_at": input_dto.processed_at.isoformat(),
+                "payment_id": str(dto.payment_id),
+                "status": "succeeded",
+                "processed_at": dto.processed_at.isoformat(),
             },
         }
     ]
 
 
-async def test__send__retry__certificate_error(
+@pytest.mark.parametrize(
+    "error",
+    [
+        WebhookDeliveryException("non-2xx"),
+        TimeoutError("timeout"),
+        ClientConnectorCertificateError(None, SSLCertVerificationError("certificate")),
+    ],
+)
+async def test_failure_is_not_retried_inside_http_adapter(
     monkeypatch: pytest.MonkeyPatch,
+    error: Exception,
 ) -> None:
     calls = 0
-    input_dto = SendPaymentWebhook(
-        payment_id=uuid7(),
-        status=PaymentStatus.SUCCEEDED,
-        processed_at=datetime(2026, 4, 7, tzinfo=UTC),
-        webhook_url="https://example.com/webhook",
-    )
 
-    async def send_once(
-        self: PaymentWebhookClient,
-        *,
-        input_dto: SendPaymentWebhook,
-    ) -> None:
+    async def make_req(self: PaymentWebhookClient, **kwargs: Any) -> None:
         nonlocal calls
         calls += 1
-        raise ClientConnectorCertificateError(
-            None,
-            SSLCertVerificationError("certificate verify failed"),
-        )
+        raise error
 
-    monkeypatch.setattr(PaymentWebhookClient, "send_once", send_once)
+    monkeypatch.setattr(PaymentWebhookClient, "_make_req", make_req)
     client = PaymentWebhookClient(
         session=cast(ClientSession, object()),
-        config=WebhookConfig(
-            base_url="http://webhook.test",
-            timeout_seconds=7,
-            max_attempts=3,
-            initial_delay_seconds=0,
-        ),
+        config=WebhookConfig(),
     )
-    certificate_error_raised = False
+    failed = False
     try:
-        await client.send(input_dto=input_dto)
-    except ClientConnectorCertificateError:
-        certificate_error_raised = True
-    assert (certificate_error_raised, calls) == (True, 3)
-
-
-async def test__send__retry__success(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls = 0
-    input_dto = SendPaymentWebhook(
-        payment_id=uuid7(),
-        status=PaymentStatus.SUCCEEDED,
-        processed_at=datetime(2026, 4, 7, tzinfo=UTC),
-        webhook_url="https://example.com/webhook",
-    )
-
-    async def send_once(
-        self: PaymentWebhookClient,
-        *,
-        input_dto: SendPaymentWebhook,
-    ) -> None:
-        nonlocal calls
-        calls += 1
-        if calls < 3:
-            raise WebhookDeliveryException("Webhook delivery failed")
-
-    monkeypatch.setattr(PaymentWebhookClient, "send_once", send_once)
-    client = PaymentWebhookClient(
-        session=cast(ClientSession, object()),
-        config=WebhookConfig(
-            base_url="http://webhook.test",
-            timeout_seconds=7,
-            max_attempts=3,
-            initial_delay_seconds=0,
-        ),
-    )
-    await client.send(input_dto=input_dto)
-    assert calls == 3
+        await client.send(
+            input_dto=SendPaymentWebhook(
+                payment_id=uuid7(),
+                status=PaymentStatus.SUCCEEDED,
+                processed_at=datetime.now(tz=UTC),
+                webhook_url="https://example.invalid/webhook",
+            )
+        )
+    except (ClientError, TimeoutError, WebhookDeliveryException):
+        failed = True
+    assert (failed, calls) == (True, 1)
