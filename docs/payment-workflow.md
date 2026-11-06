@@ -15,6 +15,14 @@ This document describes the implementation contract, not a deployment approval.
 - Gateway and webhook adapters perform one external attempt; retries belong to
   the workflow, with RabbitMQ providing delays.
 
+Storage commands express workflow intentions. Creation DTOs carry caller data;
+new payments always start pending, and new outbox events start pending with zero
+publication attempts. Publishing fixes the published state and clears the prior
+error. Payment writes use the explicit claim-fenced transitions; generic mutable
+payment updates and terminal outbox publication failure are not exposed.
+See [ADR 0001](adr/0001-intent-specific-storage-commands.md) for the interface
+decision and alternatives.
+
 ## State and budget
 
 Business status: pending -> succeeded | failed. A 10% emulated business decline

@@ -6,7 +6,6 @@ from app.domain.entities.outbox import (
     GetOutboxToPublish,
     MarkOutboxAsPublished,
     Outbox,
-    OutboxStatus,
     PublishNextOutbox,
     PublishOutboxMessage,
     RescheduleOutbox,
@@ -63,8 +62,6 @@ class PublishNextOutboxUC(IUseCase[PublishNextOutbox, Outbox | None]):
             return await self._outbox_storage.mark_as_published(
                 input_dto=MarkOutboxAsPublished(
                     id=outbox.id,
-                    status=OutboxStatus.PUBLISHED,
                     published_at=datetime.now(tz=UTC),
-                    last_error=None,
                 )
             )

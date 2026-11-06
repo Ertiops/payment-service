@@ -11,7 +11,6 @@ from app.domain.entities.payment import (
     PaymentClaim,
     RecoverPaymentAttempt,
     SaveGatewayResult,
-    UpdatePayment,
 )
 
 
@@ -42,11 +41,4 @@ class IPaymentStorage(Protocol):
         self, *, input_dto: CompletePaymentAttempt
     ) -> Payment | None: ...
 
-    async def create(self, *, input_dto: CreatePayment) -> Payment:
-        pass
-
-    async def get_by_id(self, *, input_dto: UUID) -> Payment | None:
-        pass
-
-    async def update_by_id(self, *, input_dto: UpdatePayment) -> Payment:
-        pass
+    async def get_by_id(self, *, input_dto: UUID) -> Payment | None: ...

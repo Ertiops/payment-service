@@ -110,6 +110,11 @@ Use a separate Compose project and ports when another local stack already owns
 Compose defines PostgreSQL, RabbitMQ, api and worker. API does not depend on
 RabbitMQ availability.
 
+Storage commands accept the data needed for their workflow intention: callers
+do not choose initial payment/outbox states or publication counters. Existing
+payments are changed through the explicit fenced transitions. The rationale and
+alternatives are in [ADR 0001](docs/adr/0001-intent-specific-storage-commands.md).
+
 ```bash
 docker compose build
 docker compose up -d db rabbitmq

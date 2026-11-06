@@ -1,7 +1,7 @@
 import json
 from uuid import UUID
 
-from app.domain.entities.outbox import CreateOutbox, OutboxEventType, OutboxStatus
+from app.domain.entities.outbox import CreateOutbox, OutboxEventType
 from app.domain.entities.payment import (
     AcceptedPayment,
     CompletePaymentAttempt,
@@ -48,10 +48,6 @@ def processing_message(payment_id: UUID, number: int) -> CreateOutbox:
             "payment_id": str(payment_id),
             "attempt": min(number, MAX_PROCESSING_ATTEMPTS),
         },
-        status=OutboxStatus.PENDING,
-        attempts=0,
-        last_error=None,
-        published_at=None,
     )
 
 

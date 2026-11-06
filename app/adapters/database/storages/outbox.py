@@ -13,9 +13,9 @@ from app.application.exceptions import EntityNotFoundException
 from app.domain.entities.outbox import (
     CreateOutbox,
     GetOutboxToPublish,
-    MarkOutboxAsFailed,
     MarkOutboxAsPublished,
     Outbox,
+    OutboxStatus,
     RescheduleOutbox,
 )
 from app.domain.interfaces.storages.outbox import IOutboxStorage
@@ -31,10 +31,10 @@ class OutboxStorage(IOutboxStorage):
             .values(
                 event_type=input_dto.event_type,
                 payload=input_dto.payload,
-                status=input_dto.status,
-                attempts=input_dto.attempts,
-                last_error=input_dto.last_error,
-                published_at=input_dto.published_at,
+                status=OutboxStatus.PENDING,
+                attempts=0,
+                last_error=None,
+                published_at=None,
             )
             .returning(OutboxTable)
         )
@@ -73,29 +73,9 @@ class OutboxStorage(IOutboxStorage):
                 OutboxTable.deleted_at.is_(None),
             )
             .values(
-                status=input_dto.status,
+                status=OutboxStatus.PUBLISHED,
                 published_at=input_dto.published_at,
-                last_error=input_dto.last_error,
-            )
-            .returning(OutboxTable)
-        )
-        try:
-            result = (await self.session.scalars(stmt)).one()
-        except NoResultFound as e:
-            raise EntityNotFoundException(entity=Outbox, entity_id=input_dto.id) from e
-        return convert_outbox_table_to_dto(result=result)
-
-    async def mark_as_failed(self, *, input_dto: MarkOutboxAsFailed) -> Outbox:
-        stmt = (
-            update(OutboxTable)
-            .where(
-                OutboxTable.id == input_dto.id,
-                OutboxTable.deleted_at.is_(None),
-            )
-            .values(
-                status=input_dto.status,
-                attempts=input_dto.attempts,
-                last_error=input_dto.last_error,
+                last_error=None,
             )
             .returning(OutboxTable)
         )

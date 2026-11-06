@@ -2,6 +2,7 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+import pytest
 from uuid6 import uuid7
 
 from app.adapters.database.storages.payment import PaymentStorage
@@ -18,6 +19,7 @@ from app.domain.entities.payment import (
     RecoverPaymentAttempt,
     SaveGatewayResult,
 )
+from tests.utils.payment import payment_after_gateway
 
 
 async def test_create_if_absent_returns_none_for_reserved_key(
@@ -32,7 +34,6 @@ async def test_create_if_absent_returns_none_for_reserved_key(
                 currency="USD",
                 description="different",
                 meta_data={},
-                status=PaymentStatus.PENDING,
                 idempotency_key=row.idempotency_key,
                 webhook_url="https://example.invalid/webhook",
             )
@@ -109,6 +110,84 @@ async def test_gateway_result_requires_current_claim(
         await payment_storage.save_gateway_result(
             input_dto=SaveGatewayResult(
                 id=row.id,
+                token=uuid7(),
+                status=PaymentStatus.SUCCEEDED,
+                processed_at=datetime.now(tz=UTC),
+            )
+        )
+        is None
+    )
+
+
+async def test_gateway_result_preserves_creation_data(
+    payment_storage: PaymentStorage,
+    create_payment: Callable[..., Awaitable[PaymentTable]],
+) -> None:
+    token = uuid7()
+    row = await create_payment(
+        status=PaymentStatus.PENDING,
+        processed_at=None,
+        processing_status="running",
+        processing_attempts=1,
+        claim_token=token,
+        lease_until=datetime.now(tz=UTC) + timedelta(seconds=30),
+    )
+    processed_at = datetime.now(tz=UTC)
+    expected = payment_after_gateway(
+        row,
+        status=PaymentStatus.SUCCEEDED,
+        processed_at=processed_at,
+    )
+    result = await payment_storage.save_gateway_result(
+        input_dto=SaveGatewayResult(
+            id=row.id,
+            token=token,
+            status=PaymentStatus.SUCCEEDED,
+            processed_at=processed_at,
+        )
+    )
+    assert result == expected
+
+
+@pytest.mark.parametrize("status", [PaymentStatus.SUCCEEDED, PaymentStatus.FAILED])
+async def test_gateway_result_cannot_replace_a_terminal_result(
+    payment_storage: PaymentStorage,
+    create_payment: Callable[..., Awaitable[PaymentTable]],
+    status: PaymentStatus,
+) -> None:
+    token = uuid7()
+    row = await create_payment(
+        status=status,
+        processing_status="running",
+        processing_attempts=1,
+        claim_token=token,
+        lease_until=datetime.now(tz=UTC) + timedelta(seconds=30),
+    )
+    replacement = (
+        PaymentStatus.FAILED
+        if status == PaymentStatus.SUCCEEDED
+        else PaymentStatus.SUCCEEDED
+    )
+    assert (
+        await payment_storage.save_gateway_result(
+            input_dto=SaveGatewayResult(
+                id=row.id,
+                token=token,
+                status=replacement,
+                processed_at=datetime.now(tz=UTC),
+            )
+        )
+        is None
+    )
+
+
+async def test_gateway_result_for_missing_payment_is_a_noop(
+    payment_storage: PaymentStorage,
+) -> None:
+    assert (
+        await payment_storage.save_gateway_result(
+            input_dto=SaveGatewayResult(
+                id=uuid7(),
                 token=uuid7(),
                 status=PaymentStatus.SUCCEEDED,
                 processed_at=datetime.now(tz=UTC),

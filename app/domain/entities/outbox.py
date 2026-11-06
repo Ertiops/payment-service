@@ -38,10 +38,6 @@ class Outbox:
 class CreateOutbox:
     event_type: OutboxEventType
     payload: Mapping[str, Any]
-    status: OutboxStatus
-    attempts: int
-    last_error: str | None
-    published_at: datetime | None
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -52,17 +48,7 @@ class GetOutboxToPublish:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class MarkOutboxAsPublished:
     id: UUID
-    status: OutboxStatus
     published_at: datetime
-    last_error: str | None
-
-
-@dataclass(frozen=True, kw_only=True, slots=True)
-class MarkOutboxAsFailed:
-    id: UUID
-    status: OutboxStatus
-    attempts: int
-    last_error: str
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)

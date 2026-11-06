@@ -27,7 +27,6 @@ async def test__create(
         currency=PaymentCurrency.USD,
         description="test payment",
         meta_data={"order_id": "order-1"},
-        status=PaymentStatus.PENDING,
         idempotency_key="payment-key",
         webhook_url="https://example.com/webhook",
     )
@@ -48,7 +47,6 @@ async def test__create__outbox(
         currency=PaymentCurrency.USD,
         description="test payment",
         meta_data={"order_id": "order-1"},
-        status=PaymentStatus.PENDING,
         idempotency_key="payment-key",
         webhook_url="https://example.com/webhook",
     )
@@ -79,7 +77,6 @@ async def test__create__entity_already_exists_exception__idempotency_key(
                 currency=PaymentCurrency.USD,
                 description="test payment",
                 meta_data={"order_id": "order-1"},
-                status=PaymentStatus.PENDING,
                 idempotency_key=db_payment.idempotency_key,
                 webhook_url="https://example.com/webhook",
             )
