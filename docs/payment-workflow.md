@@ -34,7 +34,7 @@ processing_attempts. Its range is 0..3. A durably started attempt is spent even
 if its process dies before an external request.
 
 Notification status: not_sent -> sending -> delivered | retrying | failed.
-Legacy delivery evidence is unknown. webhook_attempts counts durable starts
+webhook_attempts counts durable starts
 of sending, is at most processing_attempts, and does not prove client receipt.
 The status of a notification never overwrites the business status.
 
@@ -95,8 +95,10 @@ Acceptance covers concurrent create/claim, changed payloads, stable replay after
 completion, one gateway result, shared three-attempt budget, real 1/2-second
 retry delays, all webhook non-2xx/timeout/network errors, DLQ publication,
 unknown outcomes, crash recovery, stale-token fencing and eventual outbox
-publication after transient broker failure. Migration checks cover schema
-agreement, legacy unknown delivery and downgrade protection.
+publication after transient broker failure. The single initial revision `0001`
+creates the complete schema in an empty database. Migration checks cover the
+single-root graph, metadata/default agreement, counter constraints and a full
+upgrade -> downgrade to base -> upgrade cycle, including PostgreSQL enum types.
 
 A real payment provider, an exactly-once HTTP protocol, redrive API, multi-tenant
 key scoping and additional notification consumers are outside this assignment.

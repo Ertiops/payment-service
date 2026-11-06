@@ -128,16 +128,15 @@ The broker delivery limit is unset: RabbitMQ 3.13 has no default limit, and
 application claims enforce the business budget. RabbitMQ 4.x has different
 delivery-limit defaults and is outside the tested configuration.
 
-Queue arguments differ from the previous version. For an existing installation,
-drain/archive its queues and prepare a fresh vhost before switching consumers.
-Do not delete old queues as an automatic upgrade step. API/database state and
-old broker messages must be reconciled before any real cutover.
+The solution starts from one initial migration, `0001`, generated from the
+current SQLAlchemy metadata. It creates both tables, workflow fields, counter
+constraints, recovery/publishing indexes and PostgreSQL enum types in a clean
+database. Use an empty database and RabbitMQ vhost for the initial setup.
 
-Migration `7ab0a8efff9f` adds workflow fields, claim metadata, counter constraints,
-recovery/publishing indexes and outbox availability. Previously completed payments
-have notification status unknown because delivery was not recorded. Old failed
-publication events become pending again. Downgrade refuses to discard retry/DLQ
-outbox records; archive/drain them before a separately planned rollback.
+This initial schema is a fresh baseline; upgrading databases stamped with older
+revision IDs is outside this migration history. Existing databases are not reset
+automatically. Explicitly downgrading to `base` drops the application tables and
+their enum types, including stored data.
 
 There is no automatic redrive after workflow exhaustion. DLQ and GET expose the
 outcome for diagnosis; replaying an old envelope does not reset its budget.
@@ -159,10 +158,8 @@ outcome for diagnosis; replaying an old envelope does not reset its budget.
 | APP_PAYMENT_GATEWAY_MAX_DELAY_SECONDS | 5 seconds |
 | APP_PAYMENT_GATEWAY_SUCCESS_RATE | 0.9 |
 
-The lease must exceed the combined gateway and webhook timeouts.
-`APP_OUTBOX_MAX_ATTEMPTS`, `APP_WEBHOOK_MAX_ATTEMPTS` and
-`APP_WEBHOOK_INITIAL_DELAY_SECONDS` are removed: processing has one fixed budget
-of three, and RabbitMQ owns processing delays.
+The lease must exceed the combined gateway and webhook timeouts. Processing has
+one fixed budget of three, and RabbitMQ owns processing delays.
 
 ## Tests
 

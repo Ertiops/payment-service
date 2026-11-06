@@ -46,8 +46,8 @@ flowchart LR
 
 The SQL adapter still executes one query per storage method. Application use
 cases retain payment/outbox atomicity and external calls outside transactions.
-Historical `OutboxStatus.FAILED` remains readable; this decision removes its
-unused write operation, without changing the PostgreSQL enum or migration chain.
+`OutboxStatus.FAILED` remains part of the enum; the publisher uses `reschedule`
+for publication retries. Narrowing storage commands requires no schema changes.
 
 ## Alternatives considered
 
